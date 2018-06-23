@@ -17,7 +17,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-import inspect, datetime, time, traceback, tempfile
+import inspect, datetime, time, traceback
 from threading import Lock
 from queue import Queue
 from configparser import ConfigParser
@@ -103,11 +103,11 @@ def info(fmt, *args, **kwargs):
 def custom(level, fmt, *args, **kwargs):
 	log(level, fmt.format(*args), **kwargs)
 
-def exc(pre_print=False):
-	tmpfile = tempfile.SpooledTemporaryFile(max_size=1024, mode='w')
-	traceback.print_exc(file=tmpfile)
-	tmpfile.seek(0)
-	exc_str = '\n{}'.format(tmpfile.read())
-	tmpfile.close()
-	del tmpfile
-	log('ERROR', exc_str, pre_print=pre_print)
+def exc(pre_print=True):
+	#tmpfile = tempfile.SpooledTemporaryFile(max_size=1024, mode='w')
+	#traceback.print_exc(file=tmpfile)
+	#tmpfile.seek(0)
+	#exc_str = '\n{}'.format(tmpfile.read())
+	#tmpfile.close()
+	#del tmpfile
+	log('ERROR', '\n{}'.format(traceback.format_exc()), pre_print=pre_print)
