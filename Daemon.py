@@ -18,32 +18,62 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from threading import Thread
-import time
+import Log, sys, os
+from subprocess import Popen
 
-class DaemonThread(Thread):
-	def __init__(self, target_func=None, *args, **kwargs):
-		Thread.__init__(self)
-		self.daemon = True
-		self.target_func = target_func
-		self.args = args
-		self.kwargs = kwargs
-		self.start()
-	def run(self):
-		if self.target_func is None:
-			raise NotImplementedError('The subclass of `DaemonThread` should implement `run()\'')
-		else:
-			self.target_func(*self.args, **self.kwargs)
+class DaemonThreadError(Exception):
+	pass
 
-class TimerDaemonThread:
-	def __init__(self, timer: int, target_func=None, *args, **kwargs):
-		self._t = Thread(target=(target_func if target_func is not None else self.run), args=args, kwargs=kwargs, daemon=True)
-		self.timer = timer
+class DaemonProcessError(Exception):
+	pass
+
+class DaemonThread:
+	def __init__(self, target=None, args=()):
+		def __run(target, args):
+			try:
+				target(*args)
+			except:
+				Log.exc()
+				raise DaemonThreadError('Daemon thread raised exception')
+		self._t = Thread(target=__run, args=(target or self.run, args), daemon=True)
+
 	def start(self):
-		time.sleep(self.timer)
 		self._t.start()
+
+	def join(self, timeout=None):
+		self._t.join(timeout=timeout)
+
 	def isAlive(self):
 		return self._t.isAlive()
-	def join(self, timeout=None):
-		self._t.join(timeout)
-	def run(self):
+
+	def run(self, *args):
 		raise NotImplementedError('The subclass of `DaemonThread` should implement `run()\'')
+
+class DaemonProcess:
+	def __init__(self, main_entry, help_func=None, custom_arg=('-d', '--daemon'), config_file_name='config.ini', config_section='daemon'):
+		def __call_help(help_func):
+			if help_func is not None:
+				help_func()
+		if len(sys.argv) == 2:
+			if sys.argv[1] in custom_arg:
+				try:
+					from configparser import ConfigParser
+					config = ConfigParser()
+					nohup = config[config_section]['slice']
+				except:
+					nohup = True
+				Popen(['python3', sys.argv[0], '--daemon-start' if not nohup else '--daemon-start-q'])
+			elif sys.argv[1] in ('--daemon-start', '--daemon-start-q'):
+				import platform
+				if sys.argv[1][-1] == 'q':
+					sys.stdout = open('nul' if platform.system() == 'Windows' else '/dev/null', 'w')
+				with open('.pid', 'w') as fout:
+					fout.write(os.getpid())
+				main_entry()
+			elif sys.argv[1] == '-kill':
+				with open('.pid') as fin:
+					os.kill(int(fin.read()))
+			else:
+				__call_help(help_func)
+		else:
+			__call_help(help_func)
