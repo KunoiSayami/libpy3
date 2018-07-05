@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from threading import Thread
-import Log, sys, os
+import sys, os
 from subprocess import Popen
 
 class DaemonThreadError(Exception):
@@ -29,6 +29,7 @@ class DaemonProcessError(Exception):
 
 class DaemonThread:
 	def __init__(self, target=None, args=()):
+		import Log
 		def __run(target, args):
 			try:
 				target(*args)
@@ -59,20 +60,24 @@ class DaemonProcess:
 				try:
 					from configparser import ConfigParser
 					config = ConfigParser()
+					config.read(config_file_name)
+					custom_startup = config[config_section]['custom_startup']
 					nohup = config[config_section]['slice']
 				except:
 					nohup = True
-				Popen(['python3', sys.argv[0], '--daemon-start' if not nohup else '--daemon-start-q'])
+					custom_startup = 'python3'
+				Popen([custom_startup, sys.argv[0], '--daemon-start' if not nohup else '--daemon-start-q'])
 			elif sys.argv[1] in ('--daemon-start', '--daemon-start-q'):
 				import platform
 				if sys.argv[1][-1] == 'q':
 					sys.stdout = open('nul' if platform.system() == 'Windows' else '/dev/null', 'w')
 				with open('.pid', 'w') as fout:
-					fout.write(os.getpid())
+					fout.write(str(os.getpid()))
 				main_entry()
 			elif sys.argv[1] == '-kill':
+				import signal
 				with open('.pid') as fin:
-					os.kill(int(fin.read()))
+					os.kill(int(fin.read()), signal.SIGINT)
 			else:
 				__call_help(help_func)
 		else:
