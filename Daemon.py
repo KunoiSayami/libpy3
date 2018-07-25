@@ -50,8 +50,15 @@ class DaemonThread:
 	def run(self, *args):
 		raise NotImplementedError('The subclass of `DaemonThread` should implement `run()\'')
 
+'''
+; in `config.ini`
+[daemon]
+custom_startup = python3
+slice = True
+'''
+
 class DaemonProcess:
-	def __init__(self, main_entry, help_func=None, custom_arg=('-d', '--daemon'), config_file_name='config.ini', config_section='daemon'):
+	def __init__(self, main_entry, help_func=None, custom_arg=('-d', '--daemon'), config_file_name='config.ini', config_section='daemon', custom_end_function=None):
 		def __call_help(help_func):
 			if help_func is not None:
 				help_func()
@@ -78,6 +85,7 @@ class DaemonProcess:
 				import signal
 				with open('.pid') as fin:
 					os.kill(int(fin.read()), signal.SIGINT)
+				if custom_end_function: custom_end_function()
 			else:
 				__call_help(help_func)
 		else:
