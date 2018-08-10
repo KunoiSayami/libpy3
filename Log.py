@@ -17,42 +17,70 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-import inspect, datetime, time, traceback
-from threading import Lock
 from queue import Queue
+from threading import Lock
 from configparser import ConfigParser
-import sys,os
+import inspect, time, traceback, sys, os
 
 '''
 ;config.ini
 [log]
-; OFF/FATAL/ERROR/WARN/INFO/DEBUG/ALL
+; OFF/EMERG/CRIT/FATAL/ALERT/ERROR/WARN/NOTIFY/INFO/DEBUG/ALL
 log_level = 
 ; Absolute path or relative path
 log_file = 
-; Absolute path or relative path also (stderr/stdout)
+; Absolute path or relative path also (stderr/stdout/None)
 pre_print =
+; Use queue to store emergency log (bool: default = true)
+use_queue =
+; Print to sth when reach specified level
+emerg_print =
+; Specify print to standard pipe (stderr/stdout)
+emerg_print_to =
 '''
 
 __currentcwdlen = len(os.getcwd()) + 1
 
+global LOG_QUEUE_OPTION, LOG_EMERG_PRINT, LOG_EMERG_PRINT_TO
+
+LOG_LOCK = Lock()
+LOG_LEVEL_LIST = ['OFF', 'EMERG', 'CRIT', 'FATAL', 'ALERT', 'ERROR', 'WARN', 'NOTIFY', 'INFO', 'DEBUG', 'ALL']
+
+def __init_emerg_print(config: ConfigParser):
+	global LOG_EMERG_PRINT, LOG_EMERG_PRINT_TO
+	if config.has_option('log', 'emerg_print') and config['log']['emerg_print'] in LOG_LEVEL_LIST[1:]:
+		assert config.has_option('log', 'emerg_print_to') and config['log']['emerg_print_to'] in ('stderr', 'stdout')
+		LOG_EMERG_PRINT = LOG_LEVEL_LIST.index(config['log']['emerg_print'])
+		LOG_EMERG_PRINT_TO = {'stderr': sys.stderr, 'stdout': sys.stdout}[config['log']['emerg_print_to']]
+	else:
+		LOG_EMERG_PRINT = False
+		LOG_EMERG_PRINT_TO = None
+
+
 def init_log():
+	global LOG_QUEUE_OPTION
 	def _get_target(target):
 		try:
-			return {'stderr': sys.stderr, 'stdout': sys.stdout}[target]
+			return {'stderr': sys.stderr, 'stdout': sys.stdout, 'None': None}[target]
 		except KeyError:
 			return open(target, 'a')
 	config = ConfigParser()
 	config.read('config.ini')
+	__init_emerg_print(config)
+	LOG_QUEUE_OPTION = config.has_option('log', 'use_queue') and config['log']['use_queue'] == 'false'
 	return config['log']['log_level'], open(config['log']['log_file'], 'a'), _get_target(config['log']['pre_print'])
 
-LOG_LOCK = Lock()
-LOG_LEVEL_LIST = ['OFF', 'FATAL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'ALL']
-LOG_LEVEL_DICT = {LOG_LEVEL_LIST[x]:x  for x in range(0, len(LOG_LEVEL_LIST))}
-LOG_LEVEL_NUM_DICT = {v:k for k,v in LOG_LEVEL_DICT.items()}
+def __useless_queue():
+	@staticmethod
+	def put(obj): pass
+	@staticmethod
+	def get(_): raise NotImplementedError
+
+LOG_LEVEL_DICT = {LOG_LEVEL_LIST[x]:x  for x in range(len(LOG_LEVEL_LIST))}
+#LOG_LEVEL_NUM_DICT = {v:k for k,v in LOG_LEVEL_DICT.items()}
 LOG_LEVEL, LOG_FILE, LOG_PRE_PRINT = init_log()
 LOG_LEVEL_NUM = LOG_LEVEL_DICT[LOG_LEVEL]
-LOG_QUEUE = Queue()
+LOG_QUEUE = Queue() if LOG_QUEUE_OPTION else __useless_queue()
 
 def get_func_name():
 	currentFrame = inspect.currentframe()
@@ -62,52 +90,69 @@ def get_func_name():
 	del outerFrame
 	del currentFrame
 	return returnStr[1:] if returnStr[0] == '.' else returnStr
-#@staticmethod
+
 def reopen():
 	global LOG_FILE, LOG_PRE_PRINT, LOG_LEVEL
 	LOG_FILE.close()
-	if LOG_PRE_PRINT not in (sys.stderr, sys.stdout):
+	if LOG_PRE_PRINT not in (sys.stderr, sys.stdout, None):
 		LOG_PRE_PRINT.close()
 	LOG_LEVEL, LOG_FILE, LOG_PRE_PRINT = init_log()
 
-#@staticmethod
-def log(log_level, s, start='', end='\n', pre_print=True, need_put_queue=True):
+def get_level(level: str):
+	return LOG_LEVEL_LIST.index(level) if level in LOG_LEVEL_LIST else LOG_LEVEL_LIST.index('ALL')
+
+def log(log_level: str, s: str, start: str = '', end: str = '\n', pre_print: bool = True, need_put_queue: bool = True):
 	global LOG_LOCK, LOG_LEVEL_DICT, LOG_PRE_PRINT, LOG_QUEUE, LOG_FILE, LOG_LEVEL_NUM
 	log_text = '{}[{}] [{}]\t[{}] {}{}'.format(start, time.strftime('%Y-%m-%d %H:%M:%S'),
 		log_level, get_func_name(), s, end)
-	if  0 < LOG_LEVEL_DICT.get(log_level, 6) < 4:
+	if log_level in LOG_LEVEL_LIST[1:] and LOG_LEVEL_LIST.index(log_level) < 4:
+	#if  0 < LOG_LEVEL_DICT.get(log_level, LOG_LEVEL_DICT['ALL']) < 4:
 		LOG_QUEUE.put(log_text)
+	log_level_num = get_level(log_level)
 	LOG_LOCK.acquire()
 	try:
+		if LOG_EMERG_PRINT and LOG_EMERG_PRINT >= log_level_num:
+			LOG_EMERG_PRINT_TO.write(log_text)
+			LOG_EMERG_PRINT_TO.flush()
 		if pre_print and LOG_PRE_PRINT:
 			LOG_PRE_PRINT.write(log_text)
 			LOG_PRE_PRINT.flush()
-		if LOG_LEVEL_NUM >= LOG_LEVEL_DICT.get(log_level, 6) and LOG_FILE:
+		if ((log_level in LOG_LEVEL_LIST and LOG_LEVEL_LIST.index(log_level) <= LOG_LEVEL_LIST.index(LOG_LEVEL)) or \
+			(log_level not in LOG_LEVEL_LIST and LOG_LEVEL == 'ALL')) and LOG_FILE:
+		#if LOG_LEVEL_NUM >= LOG_LEVEL_DICT.get(log_level, LOG_LEVEL_DICT['ALL']) and LOG_FILE:
 			LOG_FILE.write(log_text)
 			LOG_FILE.flush()
+	except:
+		traceback.print_exc()
 	finally:
 		LOG_LOCK.release()
-#@staticmethod
-def fatal(fmt, *args, **kwargs):
+
+def fatal(fmt: tuple or list, *args, **kwargs):
 	log('FATAL', fmt.format(*args), **kwargs)
-#@staticmethod
-def error(fmt, *args, **kwargs):
+
+def emerg(fmt: tuple or list, *args, **kwargs):
+	log('EMERG', fmt.format(*args), **kwargs)
+
+def crit(fmt: tuple or list, *args, **kwargs):
+	log('CRIT', fmt.format(*args), **kwargs)
+
+def alert(fmt: tuple or list, *args, **kwargs):
+	log('ALERT', fmt.format(*args), **kwargs)
+
+def notify(fmt: tuple or list, *args, **kwargs):
+	log('NOTIFY', fmt.format(*args), **kwargs)
+
+def error(fmt: tuple or list, *args, **kwargs):
 	log('ERROR', fmt.format(*args), **kwargs)
-#@staticmethod
-def warn(fmt, *args, **kwargs):
+
+def warn(fmt: tuple or list, *args, **kwargs):
 	log('WARN', fmt.format(*args), **kwargs)
-#@staticmethod
-def info(fmt, *args, **kwargs):
+
+def info(fmt: tuple or list, *args, **kwargs):
 	log('INFO', fmt.format(*args), **kwargs)
-#@staticmethod
-def custom(level, fmt, *args, **kwargs):
+
+def custom(level: str, fmt: tuple or list, *args, **kwargs):
 	log(level, fmt.format(*args), **kwargs)
 
-def exc(pre_print=True):
-	#tmpfile = tempfile.SpooledTemporaryFile(max_size=1024, mode='w')
-	#traceback.print_exc(file=tmpfile)
-	#tmpfile.seek(0)
-	#exc_str = '\n{}'.format(tmpfile.read())
-	#tmpfile.close()
-	#del tmpfile
+def exc(pre_print: bool = True):
 	log('ERROR', '\n{}'.format(traceback.format_exc()), pre_print=pre_print)
