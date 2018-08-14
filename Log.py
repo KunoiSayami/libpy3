@@ -44,7 +44,7 @@ __currentcwdlen = len(os.getcwd()) + 1
 global LOG_QUEUE_OPTION, LOG_EMERG_PRINT, LOG_EMERG_PRINT_TO
 
 LOG_LOCK = Lock()
-LOG_LEVEL_LIST = ['OFF', 'EMERG', 'CRIT', 'FATAL', 'ALERT', 'ERROR', 'WARN', 'NOTIFY', 'INFO', 'DEBUG', 'ALL']
+LOG_LEVEL_LIST = ['OFF', 'EMERG', 'CRIT', 'FATAL', 'ERROR', 'ALERT', 'WARN', 'NOTIFY', 'INFO', 'DEBUG', 'ALL']
 
 def __init_emerg_print(config: ConfigParser):
 	global LOG_EMERG_PRINT, LOG_EMERG_PRINT_TO
@@ -56,7 +56,6 @@ def __init_emerg_print(config: ConfigParser):
 		LOG_EMERG_PRINT = False
 		LOG_EMERG_PRINT_TO = None
 
-
 def init_log():
 	global LOG_QUEUE_OPTION
 	def _get_target(target):
@@ -67,19 +66,17 @@ def init_log():
 	config = ConfigParser()
 	config.read('config.ini')
 	__init_emerg_print(config)
-	LOG_QUEUE_OPTION = config.has_option('log', 'use_queue') and config['log']['use_queue'] == 'false'
+	LOG_QUEUE_OPTION = not (config.has_option('log', 'use_queue') and config['log']['use_queue'] == 'false')
 	return config['log']['log_level'], open(config['log']['log_file'], 'a'), _get_target(config['log']['pre_print'])
 
-def __useless_queue():
+class __useless_queue:
 	@staticmethod
-	def put(obj): pass
+	def put(_): pass
 	@staticmethod
 	def get(_): raise NotImplementedError
 
 LOG_LEVEL_DICT = {LOG_LEVEL_LIST[x]:x  for x in range(len(LOG_LEVEL_LIST))}
-#LOG_LEVEL_NUM_DICT = {v:k for k,v in LOG_LEVEL_DICT.items()}
 LOG_LEVEL, LOG_FILE, LOG_PRE_PRINT = init_log()
-LOG_LEVEL_NUM = LOG_LEVEL_DICT[LOG_LEVEL]
 LOG_QUEUE = Queue() if LOG_QUEUE_OPTION else __useless_queue()
 
 def get_func_name():
@@ -102,7 +99,7 @@ def get_level(level: str):
 	return LOG_LEVEL_LIST.index(level) if level in LOG_LEVEL_LIST else LOG_LEVEL_LIST.index('ALL')
 
 def log(log_level: str, s: str, start: str = '', end: str = '\n', pre_print: bool = True, need_put_queue: bool = True):
-	global LOG_LOCK, LOG_LEVEL_DICT, LOG_PRE_PRINT, LOG_QUEUE, LOG_FILE, LOG_LEVEL_NUM
+	global LOG_LOCK, LOG_PRE_PRINT, LOG_QUEUE, LOG_FILE
 	log_text = '{}[{}] [{}]\t[{}] {}{}'.format(start, time.strftime('%Y-%m-%d %H:%M:%S'),
 		log_level, get_func_name(), s, end)
 	if log_level in LOG_LEVEL_LIST[1:] and LOG_LEVEL_LIST.index(log_level) < 4:
@@ -119,7 +116,6 @@ def log(log_level: str, s: str, start: str = '', end: str = '\n', pre_print: boo
 			LOG_PRE_PRINT.flush()
 		if ((log_level in LOG_LEVEL_LIST and LOG_LEVEL_LIST.index(log_level) <= LOG_LEVEL_LIST.index(LOG_LEVEL)) or \
 			(log_level not in LOG_LEVEL_LIST and LOG_LEVEL == 'ALL')) and LOG_FILE:
-		#if LOG_LEVEL_NUM >= LOG_LEVEL_DICT.get(log_level, LOG_LEVEL_DICT['ALL']) and LOG_FILE:
 			LOG_FILE.write(log_text)
 			LOG_FILE.flush()
 	except:
@@ -127,26 +123,26 @@ def log(log_level: str, s: str, start: str = '', end: str = '\n', pre_print: boo
 	finally:
 		LOG_LOCK.release()
 
-def fatal(fmt: tuple or list, *args, **kwargs):
-	log('FATAL', fmt.format(*args), **kwargs)
-
 def emerg(fmt: tuple or list, *args, **kwargs):
 	log('EMERG', fmt.format(*args), **kwargs)
+
+def fatal(fmt: tuple or list, *args, **kwargs):
+	log('FATAL', fmt.format(*args), **kwargs)
 
 def crit(fmt: tuple or list, *args, **kwargs):
 	log('CRIT', fmt.format(*args), **kwargs)
 
-def alert(fmt: tuple or list, *args, **kwargs):
-	log('ALERT', fmt.format(*args), **kwargs)
-
-def notify(fmt: tuple or list, *args, **kwargs):
-	log('NOTIFY', fmt.format(*args), **kwargs)
-
 def error(fmt: tuple or list, *args, **kwargs):
 	log('ERROR', fmt.format(*args), **kwargs)
 
+def alert(fmt: tuple or list, *args, **kwargs):
+	log('ALERT', fmt.format(*args), **kwargs)
+
 def warn(fmt: tuple or list, *args, **kwargs):
 	log('WARN', fmt.format(*args), **kwargs)
+
+def notify(fmt: tuple or list, *args, **kwargs):
+	log('NOTIFY', fmt.format(*args), **kwargs)
 
 def info(fmt: tuple or list, *args, **kwargs):
 	log('INFO', fmt.format(*args), **kwargs)
