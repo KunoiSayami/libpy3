@@ -33,7 +33,7 @@ class encrypt_by_AES_GCM:
 		config = ConfigParser()
 		if not all((key, associated_data)):
 			# Try read data from configure file
-			if len(config.read(config_file)) == 0 or config.has_section('encrypt'):
+			if len(config.read(config_file)) == 0 or not config.has_section('encrypt'):
 				raise IOError('`{}\' is not a compliant profile.'.format(config_file))
 		#self.key = key if key else config['encrypt']['key']
 		self.key = hash_func((key if key else config['encrypt']['key']).encode()).digest()
