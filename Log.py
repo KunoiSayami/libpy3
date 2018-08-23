@@ -102,8 +102,7 @@ def log(log_level: str, s: str, start: str = '', end: str = '\n', pre_print: boo
 	global LOG_LOCK, LOG_PRE_PRINT, LOG_QUEUE, LOG_FILE
 	log_text = '{}[{}] [{}]\t[{}] {}{}'.format(start, time.strftime('%Y-%m-%d %H:%M:%S'),
 		log_level, get_func_name(), s, end)
-	if log_level in LOG_LEVEL_LIST[1:] and LOG_LEVEL_LIST.index(log_level) < 4:
-	#if  0 < LOG_LEVEL_DICT.get(log_level, LOG_LEVEL_DICT['ALL']) < 4:
+	if log_level in LOG_LEVEL_LIST[1:] and LOG_LEVEL_LIST.index(log_level) < 5:
 		LOG_QUEUE.put(log_text)
 	log_level_num = get_level(log_level)
 	LOG_LOCK.acquire()
