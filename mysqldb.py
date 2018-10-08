@@ -22,9 +22,16 @@ from threading import Lock
 
 class mysqldb:
 	def __init__(self, host, user, password, db, charset='utf8', cursorclass=pymysql.cursors.DictCursor):
-		self.mysql_connection = pymysql.connect(host=host, user=user, password=password, db=db, charset=charset, cursorclass=cursorclass)
-		self.cursor = self.mysql_connection.cursor()
+		self.host = host
+		self.user = user
+		self.password = password
+		self.db = db
+		self.charset = charset
+		self.cursorclass = cursorclass
 		self.lock = Lock()
+	def init_connection(self):
+		self.mysql_connection = pymysql.connect(host=self.host, user=self.user, password=self.password, db=self.db, charset=self.charset, cursorclass=self.cursorclass)
+		self.cursor = self.mysql_connection.cursor()
 	def commit(self):
 		with self.lock:
 			self.cursor.close()
@@ -38,7 +45,18 @@ class mysqldb:
 		return self.cursor.fetchone()
 	def execute(self, sql, args=()):
 		with self.lock:
-			self.cursor.execute(sql, args)
+			try:
+				self.cursor.execute(sql, args)
+			except pymysql.err.OperationalError as e:
+				import traceback, sys
+				err = traceback.format_exc().splitlines()[-1]
+				if '2006' in err:
+					try: self.mysql_connection.close()
+					except: pass
+					self.init_connection()
+				else:
+					traceback.print_exc(file=sys.stderr)
+					raise e
 	def close(self):
 		with self.lock:
 			self.cursor.close()

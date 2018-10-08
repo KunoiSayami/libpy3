@@ -19,36 +19,9 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from threading import Thread
 import sys, os
-from subprocess import Popen
+import subprocess
 
-class DaemonThreadError(Exception):
-	pass
-
-class DaemonProcessError(Exception):
-	pass
-
-class DaemonThread:
-	def __init__(self, target=None, args=()):
-		import Log
-		def __run(target, args):
-			try:
-				target(*args)
-			except:
-				Log.exc()
-				raise DaemonThreadError('Daemon thread raised exception')
-		self._t = Thread(target=__run, args=(target or self.run, args), daemon=True)
-
-	def start(self):
-		self._t.start()
-
-	def join(self, timeout=None):
-		self._t.join(timeout=timeout)
-
-	def isAlive(self):
-		return self._t.isAlive()
-
-	def run(self, *args):
-		raise NotImplementedError('The subclass of `DaemonThread` should implement `run()\'')
+class DaemonProcessError(Exception): pass
 
 '''
 ; in `config.ini`
@@ -58,35 +31,43 @@ slice = True
 '''
 
 class DaemonProcess:
-	def __init__(self, main_entry, help_func=None, custom_arg=('-d', '--daemon'), config_file_name='config.ini', config_section='daemon', custom_end_function=None):
+	def __init__(self, main_entry_function,
+		help_function = None,
+		custom_arg: tuple or list = ('-d', '--daemon'),
+		*,
+		need_config_file: bool = False,
+		config_file_name: str = 'config.ini',
+		config_section: str = 'daemon',
+		custom_end_function = None):
 		def __call_help(help_func):
-			if help_func is not None:
-				help_func()
+			if help_func is not None: help_func()
 		if len(sys.argv) == 2:
 			if sys.argv[1] in custom_arg:
-				try:
-					from configparser import ConfigParser
-					config = ConfigParser()
-					config.read(config_file_name)
-					custom_startup = config[config_section]['custom_startup']
-					nohup = config[config_section]['slice']
-				except:
+				if need_config_file:
+					try:
+						from configparser import ConfigParser
+						config = ConfigParser()
+						if len(config.read(config_file_name)) == 0:
+							raise ValueError
+						custom_startup = config[config_section]['custom_startup'] if config.has_option(config_section, 'custom_startup') else sys.executable
+						nohup = config[config_section]['slice'] if config.has_option(config_section, 'slice') else True
+					except:
+						nohup = True
+						custom_startup = sys.executable
+				else:
 					nohup = True
-					custom_startup = 'python3'
-				Popen([custom_startup, sys.argv[0], '--daemon-start' if not nohup else '--daemon-start-q'])
-			elif sys.argv[1] in ('--daemon-start', '--daemon-start-q'):
-				import platform
-				if sys.argv[1][-1] == 'q':
-					sys.stdout = open('nul' if platform.system() == 'Windows' else '/dev/null', 'w')
+					custom_startup = sys.executable
+				subprocess.Popen([custom_startup, sys.argv[0], '--daemon-start'], stdout=subprocess.DEVNULL if nohup else None)
+			elif sys.argv[1] in '--daemon-start':
 				with open('.pid', 'w') as fout:
 					fout.write(str(os.getpid()))
-				main_entry()
-			elif sys.argv[1] == '-kill':
+				custom_end_function = None
+			elif sys.argv[1] in ('--kill', '--exit', '-k'):
 				import signal
 				with open('.pid') as fin:
 					os.kill(int(fin.read()), signal.SIGINT)
 				if custom_end_function: custom_end_function()
 			else:
-				__call_help(help_func)
+				__call_help(help_function)
 		else:
-			__call_help(help_func)
+			__call_help(help_function)
