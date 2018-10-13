@@ -29,6 +29,7 @@ class mysqldb:
 		self.charset = charset
 		self.cursorclass = cursorclass
 		self.lock = Lock()
+		self.init_connection()
 	def init_connection(self):
 		self.mysql_connection = pymysql.connect(host=self.host, user=self.user, password=self.password, db=self.db, charset=self.charset, cursorclass=self.cursorclass)
 		self.cursor = self.mysql_connection.cursor()
