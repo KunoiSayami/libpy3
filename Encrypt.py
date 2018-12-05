@@ -28,7 +28,7 @@ from cryptography.hazmat.primitives.ciphers import (
 from base64 import b64encode, b64decode
 from configparser import ConfigParser
 
-class encrypt_by_AES_GCM:
+class encrypt_by_AES_GCM(object):
 	def __init__(self, key: str or None = None, associated_data: bytes or None = None, config_file: str = 'config.ini', *, hash_func = hashlib.sha256):
 		config = ConfigParser()
 		if not all((key, associated_data)):
@@ -89,7 +89,7 @@ class encrypt_by_AES_GCM:
 		return self._encrypt(self.key, binary_str, self.associated_data)
 	
 	def b64encrypt(self, binary_str: bytes):
-		return '{}\\\\n{}\\\\n{}'.format(*(b64encode(_str).decode() for _str in self.encrypt(binary_str)))
+		return '\\\\n'.join((b64encode(_str).decode() for _str in self.encrypt(binary_str)))
 	
 	def b64encrypts(self, plaintext: str):
 		return self.b64encrypt(plaintext.encode())

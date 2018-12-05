@@ -69,7 +69,7 @@ def init_log():
 	LOG_QUEUE_OPTION = not (config.has_option('log', 'use_queue') and config['log']['use_queue'] == 'false')
 	return config['log']['log_level'], open(config['log']['log_file'], 'a'), _get_target(config['log']['pre_print'])
 
-class __useless_queue:
+class __useless_queue(object):
 	@staticmethod
 	def put(_): pass
 	@staticmethod

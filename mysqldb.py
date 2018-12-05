@@ -20,7 +20,7 @@
 import pymysql.cursors
 from threading import Lock
 
-class mysqldb:
+class mysqldb(object):
 	def __init__(self, host, user, password, db, charset='utf8', cursorclass=pymysql.cursors.DictCursor):
 		self.host = host
 		self.user = user

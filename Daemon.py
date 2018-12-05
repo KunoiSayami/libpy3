@@ -30,7 +30,7 @@ custom_startup = python3
 slice = True
 '''
 
-class DaemonProcess:
+class DaemonProcess(object):
 	def __init__(self, main_entry_function,
 		help_function = None,
 		custom_arg: tuple or list = ('-d', '--daemon'),
