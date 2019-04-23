@@ -21,7 +21,7 @@ import pymysql.cursors
 from threading import Lock
 
 class mysqldb(object):
-	def __init__(self, host, user, password, db, charset='utf8', cursorclass=pymysql.cursors.DictCursor):
+	def __init__(self, host: str, user: str, password: str, db: str, charset: str = 'utf8', cursorclass = pymysql.cursors.DictCursor):
 		self.host = host
 		self.user = user
 		self.password = password
@@ -31,7 +31,7 @@ class mysqldb(object):
 		self.lock = Lock()
 		self.init_connection()
 	def init_connection(self):
-		self.mysql_connection = pymysql.connect(host=self.host, user=self.user, password=self.password, db=self.db, charset=self.charset, cursorclass=self.cursorclass)
+		self.mysql_connection = pymysql.connect(host = self.host, user = self.user, password = self.password, db = self.db, charset = self.charset, cursorclass = self.cursorclass)
 		self.cursor = self.mysql_connection.cursor()
 	def commit(self):
 		with self.lock:
@@ -58,6 +58,8 @@ class mysqldb(object):
 				else:
 					traceback.print_exc(file=sys.stderr)
 					raise e
+	def ping(self):
+		return self.mysql_connection.ping()
 	def close(self):
 		with self.lock:
 			self.cursor.close()
