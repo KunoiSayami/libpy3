@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Log.py
+# mysqldb.py
 # Copyright (C) 2018-2019 KunoiSayami
 #
 # This module is part of libpy3 and is released under
@@ -18,7 +18,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 import pymysql.cursors
-from threading import Lock
+from threading import Lock, Thread
+import time
 
 class mysqldb(object):
 
@@ -37,7 +38,10 @@ class mysqldb(object):
 		self.db = db
 		self.charset = charset
 		self.cursorclass = cursorclass
-		self.lock = Lock()
+		self.execute_lock = Lock()
+		self.query_lock = Lock()
+		self.last_execute_time = 0
+		self.exit_request = False
 		self.init_connection()
 
 	def init_connection(self):
@@ -52,21 +56,25 @@ class mysqldb(object):
 		self.cursor = self.mysql_connection.cursor()
 
 	def commit(self):
-		with self.lock:
+		with self.execute_lock:
 			self.cursor.close()
 			self.mysql_connection.commit()
 			self.cursor = self.mysql_connection.cursor()
 
 	def query(self, sql, args=()):
-		self.execute(sql, args)
-		return self.cursor.fetchall()
+		with self.query_lock:
+			self.execute(sql, args, True)
+			return self.cursor.fetchall()
 
 	def query1(self, sql, args=()):
-		self.execute(sql, args)
-		return self.cursor.fetchone()
+		with self.query_lock:
+			self.execute(sql, args, True)
+			return self.cursor.fetchone()
 
-	def execute(self, sql, args=()):
-		with self.lock:
+	def execute(self, sql, args=(), ignore_query_lock: bool = False):
+		if not ignore_query_lock:
+			with self.query_lock: pass
+		with self.execute_lock:
 			try:
 				self.cursor.execute(sql, args)
 			except pymysql.err.OperationalError as e:
@@ -81,11 +89,28 @@ class mysqldb(object):
 				else:
 					traceback.print_exc(file=sys.stderr)
 					raise e
+			finally:
+				self.last_execute_time = time.time()
 
 	def ping(self):
 		return self.mysql_connection.ping()
 
+	def do_keepalive(self):
+		Thread(target = self._do_keepalive, daemon = True).start()
+
+	def _do_keepalive(self):
+		while self._do_keepalive:
+			try:
+				if time.time() - self.last_execute_time > 60 and not self.exit_request:
+					self.ping()
+			finally:
+				if self.exit_request: return
+				for _ in range(0, 5):
+					time.sleep(1)
+					if self.exit_request: return
+
 	def close(self):
-		with self.lock:
+		with self.execute_lock:
+			self.exit_request = True
 			self.cursor.close()
 			self.mysql_connection.commit()
