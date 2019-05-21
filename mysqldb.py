@@ -112,5 +112,6 @@ class mysqldb(object):
 	def close(self):
 		with self.execute_lock:
 			self.exit_request = True
-			self.cursor.close()
 			self.mysql_connection.commit()
+			self.cursor.close()
+			self.mysql_connection.close()
