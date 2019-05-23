@@ -30,7 +30,8 @@ class mysqldb(object):
 		password: str,
 		db: str,
 		charset: str = 'utf8mb4',
-		cursorclass = pymysql.cursors.DictCursor
+		cursorclass = pymysql.cursors.DictCursor,
+		autocommit = False
 	):
 		self.host = host
 		self.user = user
@@ -42,6 +43,7 @@ class mysqldb(object):
 		self.query_lock = Lock()
 		self.last_execute_time = 0
 		self.exit_request = False
+		self.autocommit = autocommit
 		self.init_connection()
 
 	def init_connection(self):
@@ -52,7 +54,7 @@ class mysqldb(object):
 			db = self.db,
 			charset = self.charset,
 			cursorclass = self.cursorclass,
-			autocommit = True
+			autocommit = self.autocommit
 		)
 		self.cursor = self.mysql_connection.cursor()
 
