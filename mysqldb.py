@@ -51,7 +51,8 @@ class mysqldb(object):
 			password = self.password,
 			db = self.db,
 			charset = self.charset,
-			cursorclass = self.cursorclass
+			cursorclass = self.cursorclass,
+			autocommit = True
 		)
 		self.cursor = self.mysql_connection.cursor()
 
