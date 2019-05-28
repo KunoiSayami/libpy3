@@ -60,8 +60,8 @@ class mysqldb(object):
 
 	def commit(self):
 		with self.execute_lock:
-			self.cursor.close()
 			self.mysql_connection.commit()
+			self.cursor.close()
 			self.cursor = self.mysql_connection.cursor()
 
 	def query(self, sql, args=()):
