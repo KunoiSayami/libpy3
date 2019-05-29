@@ -60,8 +60,8 @@ class mysqldb(object):
 
 	def commit(self):
 		with self.execute_lock:
-			self.mysql_connection.commit()
 			self.cursor.close()
+			self.mysql_connection.commit()
 			self.cursor = self.mysql_connection.cursor()
 
 	def query(self, sql, args=()):
@@ -91,7 +91,7 @@ class mysqldb(object):
 					self.init_connection()
 				else:
 					traceback.print_exc(file=sys.stderr)
-					raise e
+					raise
 			finally:
 				self.last_execute_time = time.time()
 
@@ -115,6 +115,6 @@ class mysqldb(object):
 	def close(self):
 		with self.execute_lock:
 			self.exit_request = True
-			self.mysql_connection.commit()
 			self.cursor.close()
+			self.mysql_connection.commit()
 			self.mysql_connection.close()
