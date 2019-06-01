@@ -21,6 +21,7 @@ from queue import Queue
 from threading import Lock
 from configparser import ConfigParser
 import inspect, time, traceback, sys, os
+import warnings
 
 '''
 ;config.ini
@@ -38,6 +39,11 @@ emerg_print =
 ; Specify print to standard pipe (stderr/stdout)
 emerg_print_to =
 '''
+
+warnings.warn(
+	'This module is deprecated, please use logging instead',
+	DeprecationWarning
+)
 
 __currentcwdlen = len(os.getcwd()) + 1
 

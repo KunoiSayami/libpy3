@@ -20,6 +20,7 @@
 import pymysql.cursors
 from threading import Lock, Thread
 import time
+import traceback, sys
 
 class mysqldb(object):
 
@@ -44,6 +45,7 @@ class mysqldb(object):
 		self.last_execute_time = 0
 		self.exit_request = False
 		self.autocommit = autocommit
+		self.cursor = None
 		self.init_connection()
 
 	def init_connection(self):
@@ -66,22 +68,19 @@ class mysqldb(object):
 
 	def query(self, sql, args=()):
 		with self.query_lock:
-			self.execute(sql, args, True)
+			self.execute(sql, args)
 			return self.cursor.fetchall()
 
 	def query1(self, sql, args=()):
 		with self.query_lock:
-			self.execute(sql, args, True)
+			self.execute(sql, args)
 			return self.cursor.fetchone()
 
-	def execute(self, sql, args=(), ignore_query_lock: bool = False):
-		if not ignore_query_lock:
-			with self.query_lock: pass
+	def execute(self, sql, args=()):
 		with self.execute_lock:
 			try:
 				self.cursor.execute(sql, args)
-			except pymysql.err.OperationalError as e:
-				import traceback, sys
+			except pymysql.err.OperationalError:
 				err = traceback.format_exc().splitlines()[-1]
 				if '2006' in err:
 					try:
