@@ -94,6 +94,11 @@ class mysqldb(object):
 			finally:
 				self.last_execute_time = time.time()
 
+	def executemany(self, sql, args = ()):
+		with self.execute_lock:
+			self.cursor.executemany(sql, args)
+			self.last_execute_time = time.time()
+
 	def ping(self):
 		return self.mysql_connection.ping()
 
