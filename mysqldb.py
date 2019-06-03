@@ -66,11 +66,11 @@ class mysqldb(object):
 			self.mysql_connection.commit()
 			self.cursor = self.mysql_connection.cursor()
 
-	def query(self, sql, args=()):
+	def query(self, sql: str, args: tuple or list = ()):
 		self.execute(sql, args)
 		return self.cursor.fetchall()
 
-	def query1(self, sql, args=()):
+	def query1(self, sql: str, args: tuple or list = ()):
 		self.execute(sql, args)
 		return self.cursor.fetchone()
 
@@ -81,11 +81,11 @@ class mysqldb(object):
 	def reset_retries(self):
 		self.retries = 3
 
-	def execute(self, sql, args=()):
+	def execute(self, sql: str, args: tuple or list = (), many: bool = False):
 		with self.execute_lock:
 			while self.get_retries():
 				try:
-					self.cursor.execute(sql, args)
+					(self.cursor.executemany if many else self.cursor.execute)(sql, args)
 					break
 				except pymysql.err.InterfaceError:
 					self.cursor.close()
