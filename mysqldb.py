@@ -21,6 +21,7 @@ import pymysql.cursors
 from threading import Lock, Thread
 import time
 import traceback
+import logging
 
 class mysqldb(object):
 
@@ -34,6 +35,8 @@ class mysqldb(object):
 		cursorclass = pymysql.cursors.DictCursor,
 		autocommit = False
 	):
+		self.logger = logging.getLogger(__name__)
+		self.logger.setLevel(logging.DEBUG)
 		self.host = host
 		self.user = user
 		self.password = password
@@ -88,13 +91,23 @@ class mysqldb(object):
 					(self.cursor.executemany if many else self.cursor.execute)(sql, args)
 					break
 				except pymysql.err.InterfaceError:
-					self.cursor.close()
-					self.mysql_connection.close()
+					self.logger.warning('Got interface error, trying restart connection. (Retries: %d)', self.retries)
+					self.logger.debug(traceback.format_exc())
+					self._force_close()
 					self.init_connection()
+					self.logger.info('Restart connection successful')
 				except pymysql.err.ProgrammingError:
 					err = traceback.format_exc().splitlines()[-1]
 					if 'Cursor closed' in err:
 						self.cursor = self.mysql_connection.cursor()
+				except pymysql.err.OperationalError:
+					err = traceback.format_exc().splitlines()[-1]
+					if '1213, \'Deadlock found' in err:
+						self.logger.warning('Got deadlock found error, trying restart connection. (Retries: %d)', self.retries)
+						self.logger.debug(traceback.format_exc())
+						self._force_close()
+						self.init_connection()
+						self.logger.info('Restart connection successful')
 				finally:
 					self.last_execute_time = time.time()
 			self.reset_retries()
@@ -122,3 +135,13 @@ class mysqldb(object):
 			self.cursor.close()
 			self.mysql_connection.commit()
 			self.mysql_connection.close()
+	
+	def _call_without_exception(self, target: 'callable', *args, **kwargs):
+		try:
+			target(*args, **kwargs)
+		except:
+			pass
+
+	def _force_close(self):
+		self._call_without_exception(self.cursor.close)
+		self._call_without_exception(self.mysql_connection.close)
