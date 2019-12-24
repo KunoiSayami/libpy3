@@ -21,12 +21,15 @@
 # origin from https://goo.gl/8PToR6
 import os
 import hashlib
+import struct
+from base64 import b64encode, b64decode
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import (
 	Cipher, algorithms, modes
 )
-from base64 import b64encode, b64decode
 from configparser import ConfigParser
+import tempfile
+import shutil
 
 class encrypt_by_AES_GCM(object):
 	def __init__(self, key: str or None = None, associated_data: bytes or None = None, config_file: str = 'config.ini', *, hash_func = hashlib.sha256):
@@ -97,7 +100,7 @@ class encrypt_by_AES_GCM(object):
 	def decrypt(self, iv: bytes, ciphertext: bytes, tag: bytes):
 		return self._decrypt(self.key, self.associated_data, iv, ciphertext, tag)
 	
-	def decrypts(self, iv:bytes, ciphertext: bytes, tag: bytes):
+	def decrypts(self, iv: bytes, ciphertext: bytes, tag: bytes):
 		return self.decrypt(iv, ciphertext, tag).decode()
 	
 	def b64decrypt(self, base64_encoded_str: bytes):
@@ -106,6 +109,107 @@ class encrypt_by_AES_GCM(object):
 	def b64decrypts(self, base64_encoded_str: bytes):
 		return self.b64decrypt(base64_encoded_str).decode()
 
+
+class Lib_File_AES_GCM(encrypt_by_AES_GCM):
+	class chunk_reader:
+		def __init__(self, fin, real_size: int, chunk_size: int = 1024):
+			self.fin = fin
+			self.real_size = real_size
+			self.chunk_size = chunk_size
+			self.read_progress = 0
+			self.eof = False
+		@property
+		def read(self) -> bytes:
+			if self.eof:
+				raise EOFError
+			if self.chunk_size + self.read_progress > self.real_size:
+				return self.fin.read(self.real_size - self.read_progress)
+			self.read_progress += self.chunk_size
+			return self.fin.read(self.chunk_size)
+
+	@staticmethod
+	def encrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024):
+		# Generate a random 96-bit IV.
+		iv = os.urandom(12)
+
+		# Construct an AES-GCM Cipher object with the given key and a
+		# randomly generated IV.
+		encryptor = Cipher(
+			algorithms.AES(key),
+			modes.GCM(iv),
+			backend=default_backend()
+		).encryptor()
+
+		encryptor.authenticate_additional_data(associated_data)
+		with open(input_file_name, 'rb') as fin, tempfile.TemporaryFile() as tmpf, open(output_file_name, 'wb') as fout:
+			while True:
+				chunk = fin.read(chunk_size)
+				if len(chunk) == 0:
+					break
+				tmpf.write(encryptor.update(chunk))
+			tmpf.write(encryptor.finalize())
+			tmpf.seek(0)
+
+			tag = encryptor.tag
+			#fout.write(struct.pack('<QQ', len(associated_data), len(tag)))
+			fout.write(struct.pack('<Q', len(tag)))
+			fout.write(iv)
+			#fout.write(associated_data)
+			fout.write(tag)
+			shutil.copyfileobj(tmpf, fout)
+	
+	@staticmethod
+	def decrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024):
+		with open(input_file_name, 'rb') as fin, open(output_file_name, 'wb') as fout:
+			#associated_data_size, tag_size = struct.unpack('<QQ', fin.read(struct.calcsize('QQ')))
+			tag_size = struct.unpack('<Q', fin.read(struct.calcsize('Q')))[0]
+			iv = fin.read(12)
+			#associated_data = fin.read(associated_data_size)
+			tag = fin.read(tag_size)
+			decryptor = Cipher(
+				algorithms.AES(key),
+				modes.GCM(iv, tag),
+				backend=default_backend()
+			).decryptor()
+			decryptor.authenticate_additional_data(associated_data)
+			#reader = lib_aes_gcm.chunk_reader(fin, file_size)
+			while True:
+				chunk = fin.read(chunk_size)
+				if len(chunk) == 0:
+					break
+				fout.write(decryptor.update(chunk))
+			fout.write(decryptor.finalize())
+
+	def fencrypt(self, input_file_name: str, output_file_name: str, chunk_size: int = 1024):
+		self.encrypt_file(self.key, input_file_name, output_file_name, self.associated_data, chunk_size)
+	
+	def fdecrypt(self, input_file_name: str, output_file_name: str, chunk_size: int = 1024):
+		self.decrypt_file(self.key, input_file_name, output_file_name, chunk_size)
+
+def test_random_file():
+	import random
+	with tempfile.TemporaryDirectory(prefix='tmp', dir='.') as tmpd:
+		os.chdir(tmpd)
+		with open('origin.txt', 'wb') as fout:
+			for _ in range(100000):
+				fout.write(chr(ord('A') + random.randint(0, 23)).encode())
+		test_specify_file('origin.txt')
+		os.chdir('..')
+
+def test_specify_file(file_name: str):
+	import filecmp, traceback
+	key = b'test'
+	key_hash = hashlib.sha256(key).digest()
+	try:
+		Lib_File_AES_GCM.encrypt_file(key_hash, file_name, file_name + '.enc', b'data')
+		Lib_File_AES_GCM.decrypt_file(key_hash, file_name + '.enc', 'decrypted.txt', b'data')
+		if filecmp.cmp(file_name, 'decrypted.txt'):
+			print('File test successfully')
+	except (TypeError, ValueError):
+		traceback.print_exc()
+
+
 if __name__ == '__main__':
-	s = encrypt_by_AES_GCM('1234', 'mmm')
+	s = encrypt_by_AES_GCM('1234', 'associated data')
 	print(s.b64decrypts(s.b64encrypts('This is test string')))
+	test_random_file()
