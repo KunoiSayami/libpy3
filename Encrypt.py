@@ -29,7 +29,6 @@ from cryptography.hazmat.primitives.ciphers import (
 )
 from configparser import ConfigParser
 import tempfile
-import shutil
 
 class encrypt_by_AES_GCM(object):
 	def __init__(self, key: str or None = None, associated_data: bytes or None = None, config_file: str = 'config.ini', *, hash_func = hashlib.sha256):
@@ -37,7 +36,7 @@ class encrypt_by_AES_GCM(object):
 		if not all((key, associated_data)):
 			# Try read data from configure file
 			if len(config.read(config_file)) == 0 or not config.has_section('encrypt'):
-				raise IOError('`{}\' is not a compliant profile.'.format(config_file))
+				raise IOError(f'`{config_file}\' is not a compliant profile.')
 		#self.key = key if key else config['encrypt']['key']
 		self.key = hash_func((key if key else config['encrypt']['key']).encode()).digest()
 		self.associated_data = (associated_data if associated_data else config['encrypt']['associated_data']).encode()
@@ -111,6 +110,8 @@ class encrypt_by_AES_GCM(object):
 
 
 class Lib_File_AES_GCM(encrypt_by_AES_GCM):
+	VERSION = 1
+	class VersionException(Exception): pass
 	class chunk_reader:
 		def __init__(self, fin, real_size: int, chunk_size: int = 1024):
 			self.fin = fin
@@ -141,31 +142,27 @@ class Lib_File_AES_GCM(encrypt_by_AES_GCM):
 		).encryptor()
 
 		encryptor.authenticate_additional_data(associated_data)
-		with open(input_file_name, 'rb') as fin, tempfile.TemporaryFile() as tmpf, open(output_file_name, 'wb') as fout:
+		with open(input_file_name, 'rb') as fin, open(output_file_name, 'wb') as fout:
+			fout.write(struct.pack('<Q12s16s', Lib_File_AES_GCM.VERSION, iv, b''))
 			while True:
 				chunk = fin.read(chunk_size)
 				if len(chunk) == 0:
 					break
-				tmpf.write(encryptor.update(chunk))
-			tmpf.write(encryptor.finalize())
-			tmpf.seek(0)
-
-			tag = encryptor.tag
-			#fout.write(struct.pack('<QQ', len(associated_data), len(tag)))
-			fout.write(struct.pack('<Q', len(tag)))
-			fout.write(iv)
-			#fout.write(associated_data)
-			fout.write(tag)
-			shutil.copyfileobj(tmpf, fout)
+				fout.write(encryptor.update(chunk))
+			fout.write(encryptor.finalize())
+			fout.seek(struct.calcsize('Q12s'))
+			fout.write(struct.pack('16s', encryptor.tag))
+			#print(Lib_File_AES_GCM.VERSION, iv, encryptor.tag)
 	
 	@staticmethod
 	def decrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024):
 		with open(input_file_name, 'rb') as fin, open(output_file_name, 'wb') as fout:
 			#associated_data_size, tag_size = struct.unpack('<QQ', fin.read(struct.calcsize('QQ')))
-			tag_size = struct.unpack('<Q', fin.read(struct.calcsize('Q')))[0]
-			iv = fin.read(12)
+			_VERSION, iv, tag = struct.unpack('<Q12s16s', fin.read(struct.calcsize('Q12s16s')))
+			#print(_VERSION, iv, tag)
 			#associated_data = fin.read(associated_data_size)
-			tag = fin.read(tag_size)
+			if _VERSION != Lib_File_AES_GCM.VERSION:
+				raise Lib_File_AES_GCM.VersionException(f'Except {Lib_File_AES_GCM.VERSION} but {_VERSION} found.')
 			decryptor = Cipher(
 				algorithms.AES(key),
 				modes.GCM(iv, tag),
@@ -186,24 +183,30 @@ class Lib_File_AES_GCM(encrypt_by_AES_GCM):
 	def fdecrypt(self, input_file_name: str, output_file_name: str, chunk_size: int = 1024):
 		self.decrypt_file(self.key, input_file_name, output_file_name, chunk_size)
 
-def test_random_file():
+def test_random_file(mute: bool = False):
 	import random
+	interrupted = False
 	with tempfile.TemporaryDirectory(prefix='tmp', dir='.') as tmpd:
 		os.chdir(tmpd)
-		with open('origin.txt', 'wb') as fout:
-			for _ in range(100000):
-				fout.write(chr(ord('A') + random.randint(0, 23)).encode())
-		test_specify_file('origin.txt')
+		try:
+			with open('origin.txt', 'wb') as fout:
+				for _ in range(100000):
+					fout.write(chr(ord('A') + random.randint(0, 23)).encode())
+			test_specify_file('origin.txt', mute)
+		except InterruptedError:
+			interrupted = True
 		os.chdir('..')
+	if interrupted:
+		raise InterruptedError
 
-def test_specify_file(file_name: str):
+def test_specify_file(file_name: str, mute: bool = False):
 	import filecmp, traceback
 	key = b'test'
 	key_hash = hashlib.sha256(key).digest()
 	try:
 		Lib_File_AES_GCM.encrypt_file(key_hash, file_name, file_name + '.enc', b'data')
 		Lib_File_AES_GCM.decrypt_file(key_hash, file_name + '.enc', 'decrypted.txt', b'data')
-		if filecmp.cmp(file_name, 'decrypted.txt'):
+		if mute != True and filecmp.cmp(file_name, 'decrypted.txt'):
 			print('File test successfully')
 	except (TypeError, ValueError):
 		traceback.print_exc()
