@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Encrypt.py
-# Copyright (C) 2018-2019 KunoiSayami
+# Copyright (C) 2018-2020 KunoiSayami
 #
 # This module is part of libpy3 and is released under
 # the AGPL v3 License: https://www.gnu.org/licenses/agpl-3.0.txt
@@ -112,21 +112,6 @@ class encrypt_by_AES_GCM(object):
 class Lib_File_AES_GCM(encrypt_by_AES_GCM):
 	VERSION = 1
 	class VersionException(Exception): pass
-	class chunk_reader:
-		def __init__(self, fin, real_size: int, chunk_size: int = 1024):
-			self.fin = fin
-			self.real_size = real_size
-			self.chunk_size = chunk_size
-			self.read_progress = 0
-			self.eof = False
-		@property
-		def read(self) -> bytes:
-			if self.eof:
-				raise EOFError
-			if self.chunk_size + self.read_progress > self.real_size:
-				return self.fin.read(self.real_size - self.read_progress)
-			self.read_progress += self.chunk_size
-			return self.fin.read(self.chunk_size)
 
 	@staticmethod
 	def encrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024):

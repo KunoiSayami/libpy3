@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # mysqldb.py
-# Copyright (C) 2018-2019 KunoiSayami
+# Copyright (C) 2018-2020 KunoiSayami
 #
 # This module is part of libpy3 and is released under
 # the AGPL v3 License: https://www.gnu.org/licenses/agpl-3.0.txt
@@ -23,7 +23,7 @@ import time
 import traceback
 import logging
 
-class mysqldb(object):
+class _mysqldb:
 
 	def __init__(
 		self,
@@ -145,3 +145,22 @@ class mysqldb(object):
 	def _force_close(self):
 		self._call_without_exception(self.cursor.close)
 		self._call_without_exception(self.mysql_connection.close)
+
+class mysqldb(_mysqldb):
+	_self = None
+	@staticmethod
+	def init_instance(
+		host: str,
+		user: str,
+		password: str,
+		db: str,
+		charset: str = 'utf8mb4',
+		cursorclass = pymysql.cursors.DictCursor,
+		autocommit = False
+	) -> _mysqldb:
+		mysqldb._self = _mysqldb(host, user, password, db, charset, cursorclass, autocommit)
+		return mysqldb._self
+	
+	@staticmethod
+	def get_instance() -> _mysqldb:
+		return mysqldb._self
