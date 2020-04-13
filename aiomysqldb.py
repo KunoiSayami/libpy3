@@ -90,7 +90,7 @@ class _mysqldb:
 			return await self.cursor.fetchone()
 
 	async def execute(self, sql: str, args: Sequence[str]=(), many: bool = False) -> NoReturn:
-		self.reconnect_check()
+		await self.reconnect_check()
 		await (self.cursor.executemany if many else self.cursor.execute)(sql, args)
 		self.last_execute_time = time.time()
 
