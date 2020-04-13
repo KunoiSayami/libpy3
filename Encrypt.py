@@ -19,16 +19,16 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 # origin from https://goo.gl/8PToR6
-import os
 import hashlib
+import os
 import struct
-from base64 import b64encode, b64decode
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.ciphers import (
-	Cipher, algorithms, modes
-)
-from configparser import ConfigParser
 import tempfile
+from base64 import b64decode, b64encode
+from configparser import ConfigParser
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 
 class encrypt_by_AES_GCM(object):
 	def __init__(self, key: str or None = None, associated_data: bytes or None = None, config_file: str = 'config.ini', *, hash_func = hashlib.sha256):
@@ -109,7 +109,7 @@ class encrypt_by_AES_GCM(object):
 		return self.b64decrypt(base64_encoded_str).decode()
 
 
-class Lib_File_AES_GCM(encrypt_by_AES_GCM):
+class AESGCMEncrypt(encrypt_by_AES_GCM):
 	VERSION = 1
 	class VersionException(Exception): pass
 
@@ -128,7 +128,7 @@ class Lib_File_AES_GCM(encrypt_by_AES_GCM):
 
 		encryptor.authenticate_additional_data(associated_data)
 		with open(input_file_name, 'rb') as fin, open(output_file_name, 'wb') as fout:
-			fout.write(struct.pack('<Q12s16s', Lib_File_AES_GCM.VERSION, iv, b''))
+			fout.write(struct.pack('<Q12s16s', AESGCMEncrypt.VERSION, iv, b''))
 			while True:
 				chunk = fin.read(chunk_size)
 				if len(chunk) == 0:
@@ -137,7 +137,7 @@ class Lib_File_AES_GCM(encrypt_by_AES_GCM):
 			fout.write(encryptor.finalize())
 			fout.seek(struct.calcsize('Q12s'))
 			fout.write(struct.pack('16s', encryptor.tag))
-			#print(Lib_File_AES_GCM.VERSION, iv, encryptor.tag)
+			#print(AESGCMEncrypt.VERSION, iv, encryptor.tag)
 	
 	@staticmethod
 	def decrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024):
@@ -146,8 +146,8 @@ class Lib_File_AES_GCM(encrypt_by_AES_GCM):
 			_VERSION, iv, tag = struct.unpack('<Q12s16s', fin.read(struct.calcsize('Q12s16s')))
 			#print(_VERSION, iv, tag)
 			#associated_data = fin.read(associated_data_size)
-			if _VERSION != Lib_File_AES_GCM.VERSION:
-				raise Lib_File_AES_GCM.VersionException(f'Except {Lib_File_AES_GCM.VERSION} but {_VERSION} found.')
+			if _VERSION != AESGCMEncrypt.VERSION:
+				raise AESGCMEncrypt.VersionException(f'Except {AESGCMEncrypt.VERSION} but {_VERSION} found.')
 			decryptor = Cipher(
 				algorithms.AES(key),
 				modes.GCM(iv, tag),
@@ -189,8 +189,8 @@ def test_specify_file(file_name: str, mute: bool = False):
 	key = b'test'
 	key_hash = hashlib.sha256(key).digest()
 	try:
-		Lib_File_AES_GCM.encrypt_file(key_hash, file_name, file_name + '.enc', b'data')
-		Lib_File_AES_GCM.decrypt_file(key_hash, file_name + '.enc', 'decrypted.txt', b'data')
+		AESGCMEncrypt.encrypt_file(key_hash, file_name, file_name + '.enc', b'data')
+		AESGCMEncrypt.decrypt_file(key_hash, file_name + '.enc', 'decrypted.txt', b'data')
 		if mute != True and filecmp.cmp(file_name, 'decrypted.txt'):
 			print('File test successfully')
 	except (TypeError, ValueError):

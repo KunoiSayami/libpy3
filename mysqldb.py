@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# mysqldb.py
+# MySqlDB.py
 # Copyright (C) 2018-2020 KunoiSayami
 #
 # This module is part of libpy3 and is released under
@@ -17,13 +17,15 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-import pymysql.cursors
-from threading import Lock, Thread
+import logging
 import time
 import traceback
-import logging
+from threading import Lock, Thread
 
-class _mysqldb:
+import pymysql.cursors
+
+
+class _MySqlDB:
 
 	def __init__(
 		self,
@@ -146,7 +148,8 @@ class _mysqldb:
 		self._call_without_exception(self.cursor.close)
 		self._call_without_exception(self.mysql_connection.close)
 
-class mysqldb(_mysqldb):
+
+class MySqlDB(_MySqlDB):
 	_self = None
 	@staticmethod
 	def init_instance(
@@ -157,10 +160,10 @@ class mysqldb(_mysqldb):
 		charset: str = 'utf8mb4',
 		cursorclass = pymysql.cursors.DictCursor,
 		autocommit = False
-	) -> _mysqldb:
-		mysqldb._self = _mysqldb(host, user, password, db, charset, cursorclass, autocommit)
-		return mysqldb._self
+	) -> _MySqlDB:
+		MySqlDB._self = _MySqlDB(host, user, password, db, charset, cursorclass, autocommit)
+		return MySqlDB._self
 	
 	@staticmethod
-	def get_instance() -> _mysqldb:
-		return mysqldb._self
+	def get_instance() -> _MySqlDB:
+		return MySqlDB._self
