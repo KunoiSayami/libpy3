@@ -22,7 +22,7 @@ import logging
 import time
 from configparser import ConfigParser
 from threading import Thread
-from typing import Iterable, NoReturn, Optional, Tuple
+from typing import NoReturn, Optional, Sequence, Tuple
 
 import aiomysql
 
@@ -79,22 +79,28 @@ class _mysqldb:
 			await self.mysql_connection.commit()
 			self.cursor = await self.mysql_connection.cursor()
 
-	async def query(self, sql: str, args: Iterable=()) -> Tuple[dict]:
+	async def query(self, sql: str, args: Sequence[str]=()) -> Tuple[dict]:
 		async with self.execute_lock:
 			await self.execute(sql, args)
 			return await self.cursor.fetchall()
 
-	async def query1(self, sql: str, args: Iterable=()) -> Optional[dict]:
+	async def query1(self, sql: str, args: Sequence[str]=()) -> Optional[dict]:
 		async with self.execute_lock:
 			await self.execute(sql, args)
 			return await self.cursor.fetchone()
 
-	async def execute(self, sql: str, args: tuple or list = (), many: bool = False) -> NoReturn:
+	async def execute(self, sql: str, args: Sequence[str]=(), many: bool = False) -> NoReturn:
+		self.reconnect_check()
 		await (self.cursor.executemany if many else self.cursor.execute)(sql, args)
+		self.last_execute_time = time.time()
 
 	async def ping(self) -> '_mysqldb':
 		await self.mysql_connection.ping()
 		return self
+
+	async def reconnect_check(self) -> NoReturn:
+		if time.time() - self.last_execute_time > 300:
+			await self.ping()
 
 	def do_keepalive(self) -> NoReturn:
 		thread = ThreadWithEventLoop()
