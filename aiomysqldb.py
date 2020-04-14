@@ -19,7 +19,6 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 import asyncio
 import logging
-import time
 from configparser import ConfigParser
 from threading import Thread
 from typing import NoReturn, Optional, Sequence, Tuple
@@ -38,7 +37,6 @@ class _mysqldb:
 		#event_loop: asyncio.AbstractEventLoop,
 		charset: str='utf8mb4',
 		cursorclass: aiomysql.Cursor=aiomysql.DictCursor,
-		autocommit: bool=False
 	):
 		self.logger = logging.getLogger(__name__)
 		self.logger.setLevel(logging.DEBUG)
@@ -51,16 +49,17 @@ class _mysqldb:
 		self.execute_lock = asyncio.Lock()
 		self.last_execute_time = 0
 		self.exit_request = False
-		self.autocommit = autocommit
+		self.autocommit = True
 		self.cursor = None
 		#self.retries = 3
 		#self.event_loop = None
 		#self.init_connection()
-		self.mysql_connection = None
+		#self.mysql_connection = None
+		self.mysql_pool = None
 		self._keep_alive_task = None
 
 	async def init_connection(self) -> NoReturn:
-		self.mysql_connection = await aiomysql.connect(
+		self.mysql_pool = await aiomysql.create_pool(
 			host=self.host,
 			user=self.user,
 			password=self.password,
@@ -70,67 +69,31 @@ class _mysqldb:
 			autocommit=self.autocommit,
 			#loop=self.event_loop
 		)
-		self.cursor = await self.mysql_connection.cursor()
-
-	async def commit(self) -> NoReturn:
-		async with self.execute_lock:
-		#async with self.execute_lock:
-			await self.cursor.close()
-			await self.mysql_connection.commit()
-			self.cursor = await self.mysql_connection.cursor()
+		#self.cursor = await self.mysql_connection.cursor()
 
 	async def query(self, sql: str, args: Sequence[str]=()) -> Tuple[dict]:
-		async with self.execute_lock:
-			await self.execute(sql, args)
-			return await self.cursor.fetchall()
+		async with self.mysql_pool.acquire() as conn:
+			async with conn.cursor() as cur:
+				await cur.execute(sql, args)
+				return await cur.fetchall()
 
 	async def query1(self, sql: str, args: Sequence[str]=()) -> Optional[dict]:
-		async with self.execute_lock:
-			await self.execute(sql, args)
-			return await self.cursor.fetchone()
+		async with self.mysql_pool.acquire() as conn:
+			async with conn.cursor() as cur:
+				await cur.execute(sql, args)
+				return await cur.fetchone()
 
 	async def execute(self, sql: str, args: Sequence[str]=(), many: bool = False) -> NoReturn:
-		await self.reconnect_check()
-		await (self.cursor.executemany if many else self.cursor.execute)(sql, args)
-		self.last_execute_time = time.time()
-
-	async def ping(self) -> '_mysqldb':
-		await self.mysql_connection.ping()
-		return self
-
-	async def reconnect_check(self) -> NoReturn:
-		if time.time() - self.last_execute_time > 300:
-			await self.ping()
-
-	def do_keepalive(self) -> NoReturn:
-		thread = ThreadWithEventLoop()
-		time.sleep(1)
-		task = self._do_keepalive()
-		#thread.event_loop.run_forever()
-		#print(thread.event_loop.is_running())
-		asyncio.run_coroutine_threadsafe(task, thread.event_loop)
-
-	def create_keep_alive(self) -> NoReturn:
-		_eventloop = asyncio.new_event_loop()
-		asyncio.ensure_future(self._do_keepalive(), loop=_eventloop)
-		_eventloop.run_forever()
-
-	async def _do_keepalive(self) -> NoReturn:
-		while True:
-			try:
-				if time.time() - self.last_execute_time > 300 and not self.exit_request:
-					await self.ping()
-				self.last_execute_time = time.time()
-			finally:
-				await asyncio.sleep(1)
+		#await self.reconnect_check()
+		async with self.mysql_pool.acquire() as conn:
+			async with conn.cursor() as cur:
+				await (cur.executemany if many else cur.execute)(sql, args)
+			await conn.commit()
+		#self.last_execute_time = time.time()
 
 	async def close(self) -> NoReturn:
-		#with self.lo
-		async with self.execute_lock:
-			#self.exit_request = True
-			await self.cursor.close()
-			await self.mysql_connection.commit()
-			self.mysql_connection.close()
+		self.mysql_pool.close()
+		await self.mysql_pool.wait_closed()
 
 	#async def connect(self, event_loop: asyncio.AbstractEventLoop):
 	#	#self.event_loop = event_loop
@@ -147,9 +110,8 @@ class mysqldb(_mysqldb):
 		#event_loop: asyncio.AbstractEventLoop,
 		charset: str = 'utf8mb4',
 		cursorclass = aiomysql.DictCursor,
-		autocommit = False
 	) -> _mysqldb:
-		mysqldb._self = _mysqldb(host, user, password, db, charset, cursorclass, autocommit)
+		mysqldb._self = _mysqldb(host, user, password, db, charset, cursorclass)
 		return mysqldb._self
 	
 	@staticmethod
@@ -162,13 +124,11 @@ async def main():
 	conn = mysqldb.init_instance(config.get('mysql', 'host'),
 								config.get('mysql', 'user'),
 								config.get('mysql', 'password'),
-								config.get('mysql', 'db'),
-								autocommit=True)
+								config.get('mysql', 'db'))
 	await conn.init_connection()
 	obj = await conn.query1('SELECT 10;')
 	print(obj)
-	conn.do_keepalive()
-	time.sleep(60)
+	#conn.do_keepalive()
 	await conn.close()
 
 
