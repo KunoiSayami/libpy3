@@ -21,7 +21,7 @@ import asyncio
 import logging
 from configparser import ConfigParser
 from threading import Thread
-from typing import NoReturn, Optional, Sequence, Tuple
+from typing import Dict, NoReturn, Optional, Sequence, T, Tuple, Union
 
 import aiomysql
 
@@ -38,25 +38,25 @@ class _mysqldb:
 		charset: str='utf8mb4',
 		cursorclass: aiomysql.Cursor=aiomysql.DictCursor,
 	):
-		self.logger = logging.getLogger(__name__)
+		self.logger: logging.Logger = logging.getLogger(__name__)
 		self.logger.setLevel(logging.DEBUG)
-		self.host = host
-		self.user = user
-		self.password = password
-		self.db = db
-		self.charset = charset
-		self.cursorclass = cursorclass
-		self.execute_lock = asyncio.Lock()
-		self.last_execute_time = 0
-		self.exit_request = False
-		self.autocommit = True
-		self.cursor = None
+		self.host: str = host
+		self.user: str = user
+		self.password: str = password
+		self.db: str = db
+		self.charset: str = charset
+		self.cursorclass: aiomysql.Cursor = cursorclass
+		self.execute_lock: asyncio.Lock = asyncio.Lock()
+		self.last_execute_time: float = 0.0
+		self.exit_request: bool = False
+		self.autocommit: bool = True
+		#self.cursor = None
 		#self.retries = 3
 		#self.event_loop = None
 		#self.init_connection()
 		#self.mysql_connection = None
-		self.mysql_pool = None
-		self._keep_alive_task = None
+		self.mysql_pool: aiomysql.Connection = None
+		#self._keep_alive_task = None
 
 	async def init_connection(self) -> NoReturn:
 		self.mysql_pool = await aiomysql.create_pool(
@@ -66,24 +66,37 @@ class _mysqldb:
 			db=self.db,
 			charset=self.charset,
 			cursorclass=self.cursorclass,
-			autocommit=self.autocommit,
+			autocommit=True,
 			#loop=self.event_loop
 		)
 		#self.cursor = await self.mysql_connection.cursor()
 
-	async def query(self, sql: str, args: Sequence[str]=()) -> Tuple[dict]:
+	@classmethod
+	async def create(cls,
+		host: str,
+		user: str,
+		password: str,
+		db: str,
+		charset: str='utf8mb4',
+		cursorclass: aiomysql.Cursor=aiomysql.DictCursor
+	) -> '_mysqldb':
+		self = _mysqldb(host, user, password, db, charset, cursorclass)
+		await self.init_connection()
+		return self
+
+	async def query(self, sql: str, args: Sequence[str]=()) -> Tuple[Dict[str, T]]:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await cur.execute(sql, args)
 				return await cur.fetchall()
 
-	async def query1(self, sql: str, args: Sequence[str]=()) -> Optional[dict]:
+	async def query1(self, sql: str, args: Sequence[str]=()) -> Optional[Dict[str, T]]:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await cur.execute(sql, args)
 				return await cur.fetchone()
 
-	async def execute(self, sql: str, args: Sequence[str]=(), many: bool = False) -> NoReturn:
+	async def execute(self, sql: str, args: Union[Sequence[str], Sequence[Sequence[str]]]=(), many: bool=False) -> NoReturn:
 		#await self.reconnect_check()
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
@@ -114,6 +127,20 @@ class mysqldb(_mysqldb):
 		mysqldb._self = _mysqldb(host, user, password, db, charset, cursorclass)
 		return mysqldb._self
 	
+	@classmethod
+	async def create(cls,
+		host: str,
+		user: str,
+		password: str,
+		db: str,
+		charset: str='utf8mb4',
+		cursorclass: aiomysql.Cursor=aiomysql.DictCursor
+	) -> 'mysqldb':
+		self = mysqldb(host, user, password, db, charset, cursorclass)
+		mysqldb._self = self
+		await self.init_connection()
+		return self
+
 	@staticmethod
 	def get_instance() -> _mysqldb:
 		return mysqldb._self
