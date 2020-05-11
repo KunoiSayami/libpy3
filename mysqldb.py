@@ -21,6 +21,7 @@ import logging
 import time
 import traceback
 from threading import Lock, Thread
+from typing import Dict, NoReturn, Optional, Sequence, T, Tuple
 
 import pymysql.cursors
 
@@ -53,7 +54,7 @@ class _MySqlDB:
 		self.retries = 3
 		self.init_connection()
 
-	def init_connection(self):
+	def init_connection(self) -> NoReturn:
 		self.mysql_connection = pymysql.connect(
 			host = self.host,
 			user = self.user,
@@ -65,28 +66,28 @@ class _MySqlDB:
 		)
 		self.cursor = self.mysql_connection.cursor()
 
-	def commit(self):
+	def commit(self) -> NoReturn:
 		with self.execute_lock:
 			self.cursor.close()
 			self.mysql_connection.commit()
 			self.cursor = self.mysql_connection.cursor()
 
-	def query(self, sql: str, args: tuple or list = ()):
+	def query(self, sql: str, args: Sequence[T] = ()) -> Tuple[Dict[str, T], ...]:
 		self.execute(sql, args)
 		return self.cursor.fetchall()
 
-	def query1(self, sql: str, args: tuple or list = ()):
+	def query1(self, sql: str, args: Sequence[T] = ()) -> Optional[Dict[str, T]]:
 		self.execute(sql, args)
 		return self.cursor.fetchone()
 
-	def get_retries(self):
+	def get_retries(self) -> int:
 		self.retries -= 1
 		return self.retries
 	
-	def reset_retries(self):
+	def reset_retries(self) -> NoReturn:
 		self.retries = 3
 
-	def execute(self, sql: str, args: tuple or list = (), many: bool = False):
+	def execute(self, sql: str, args: Sequence[T] = (), many: bool = False) -> NoReturn:
 		with self.execute_lock:
 			while self.get_retries():
 				try:
@@ -114,13 +115,13 @@ class _MySqlDB:
 					self.last_execute_time = time.time()
 			self.reset_retries()
 
-	def ping(self):
+	def ping(self) -> NoReturn:
 		return self.mysql_connection.ping()
 
-	def do_keepalive(self):
+	def do_keepalive(self) -> NoReturn:
 		Thread(target = self._do_keepalive, daemon = True).start()
 
-	def _do_keepalive(self):
+	def _do_keepalive(self) -> NoReturn:
 		while self._do_keepalive:
 			try:
 				if time.time() - self.last_execute_time > 300 and not self.exit_request:
@@ -131,20 +132,20 @@ class _MySqlDB:
 					time.sleep(1)
 					if self.exit_request: return
 
-	def close(self):
+	def close(self) -> NoReturn:
 		with self.execute_lock:
 			self.exit_request = True
 			self.cursor.close()
 			self.mysql_connection.commit()
 			self.mysql_connection.close()
 	
-	def _call_without_exception(self, target: 'callable', *args, **kwargs):
+	def _call_without_exception(self, target: 'callable', *args, **kwargs) -> NoReturn:
 		try:
 			target(*args, **kwargs)
 		except:
 			pass
 
-	def _force_close(self):
+	def _force_close(self) -> NoReturn:
 		self._call_without_exception(self.cursor.close)
 		self._call_without_exception(self.mysql_connection.close)
 
@@ -160,10 +161,10 @@ class MySqlDB(_MySqlDB):
 		charset: str = 'utf8mb4',
 		cursorclass = pymysql.cursors.DictCursor,
 		autocommit = False
-	) -> _MySqlDB:
-		MySqlDB._self = _MySqlDB(host, user, password, db, charset, cursorclass, autocommit)
+	) -> 'MySqlDB':
+		MySqlDB._self = MySqlDB(host, user, password, db, charset, cursorclass, autocommit)
 		return MySqlDB._self
 	
 	@staticmethod
-	def get_instance() -> _MySqlDB:
+	def get_instance() -> 'MySqlDB':
 		return MySqlDB._self

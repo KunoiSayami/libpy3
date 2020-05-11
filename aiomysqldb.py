@@ -111,9 +111,9 @@ class MySqlDB(_MySqlDB):
 		charset: str='utf8mb4',
 		cursorclass: aiomysql.Cursor=aiomysql.DictCursor
 	) -> 'MySqlDB':
-		self = MySqlDB(host, user, password, db, charset, cursorclass)
-		if MySqlDB._self is None:
-			MySqlDB._self = self
+		self = cls(host, user, password, db, charset, cursorclass)
+		if cls._self is None:
+			cls._self = self
 		await self.init_connection()
 		return self
 
@@ -121,7 +121,7 @@ class MySqlDB(_MySqlDB):
 	def get_instance() -> 'MySqlDB':
 		return MySqlDB._self
 
-async def main():
+async def main() -> NoReturn:
 	config = ConfigParser()
 	config.read('config.ini')
 	conn = await MySqlDB.create(config.get('mysql', 'host'),
