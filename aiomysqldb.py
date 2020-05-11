@@ -26,7 +26,7 @@ from typing import Dict, NoReturn, Optional, Sequence, T, Tuple, Union
 import aiomysql
 
 
-class _mysqldb:
+class _MySqlDB:
 
 	def __init__(
 		self,
@@ -50,13 +50,7 @@ class _mysqldb:
 		self.last_execute_time: float = 0.0
 		self.exit_request: bool = False
 		self.autocommit: bool = True
-		#self.cursor = None
-		#self.retries = 3
-		#self.event_loop = None
-		#self.init_connection()
-		#self.mysql_connection = None
 		self.mysql_pool: aiomysql.Connection = None
-		#self._keep_alive_task = None
 
 	async def init_connection(self) -> NoReturn:
 		self.mysql_pool = await aiomysql.create_pool(
@@ -66,10 +60,8 @@ class _mysqldb:
 			db=self.db,
 			charset=self.charset,
 			cursorclass=self.cursorclass,
-			autocommit=True,
-			#loop=self.event_loop
+			autocommit=True
 		)
-		#self.cursor = await self.mysql_connection.cursor()
 
 	@classmethod
 	async def create(cls,
@@ -80,7 +72,7 @@ class _mysqldb:
 		charset: str='utf8mb4',
 		cursorclass: aiomysql.Cursor=aiomysql.DictCursor
 	) -> '_mysqldb':
-		self = _mysqldb(host, user, password, db, charset, cursorclass)
+		self = _MySqlDB(host, user, password, db, charset, cursorclass)
 		await self.init_connection()
 		return self
 
@@ -97,36 +89,19 @@ class _mysqldb:
 				return await cur.fetchone()
 
 	async def execute(self, sql: str, args: Union[Sequence[str], Sequence[Sequence[str]]]=(), many: bool=False) -> NoReturn:
-		#await self.reconnect_check()
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await (cur.executemany if many else cur.execute)(sql, args)
 			await conn.commit()
-		#self.last_execute_time = time.time()
 
 	async def close(self) -> NoReturn:
 		self.mysql_pool.close()
 		await self.mysql_pool.wait_closed()
 
-	#async def connect(self, event_loop: asyncio.AbstractEventLoop):
-	#	#self.event_loop = event_loop
-	#	await self.init_connection()
 
-class mysqldb(_mysqldb):
+class MySqlDB(_MySqlDB):
 	_self = None
-	@staticmethod
-	def init_instance(
-		host: str,
-		user: str,
-		password: str,
-		db: str,
-		#event_loop: asyncio.AbstractEventLoop,
-		charset: str = 'utf8mb4',
-		cursorclass = aiomysql.DictCursor,
-	) -> _mysqldb:
-		mysqldb._self = _mysqldb(host, user, password, db, charset, cursorclass)
-		return mysqldb._self
-	
+
 	@classmethod
 	async def create(cls,
 		host: str,
@@ -135,20 +110,21 @@ class mysqldb(_mysqldb):
 		db: str,
 		charset: str='utf8mb4',
 		cursorclass: aiomysql.Cursor=aiomysql.DictCursor
-	) -> 'mysqldb':
-		self = mysqldb(host, user, password, db, charset, cursorclass)
-		mysqldb._self = self
+	) -> 'MySqlDB':
+		self = MySqlDB(host, user, password, db, charset, cursorclass)
+		if MySqlDB._self is None:
+			MySqlDB._self = self
 		await self.init_connection()
 		return self
 
 	@staticmethod
-	def get_instance() -> _mysqldb:
-		return mysqldb._self
+	def get_instance() -> 'MySqlDB':
+		return MySqlDB._self
 
 async def main():
 	config = ConfigParser()
 	config.read('config.ini')
-	conn = mysqldb.init_instance(config.get('mysql', 'host'),
+	conn = await MySqlDB.create(config.get('mysql', 'host'),
 								config.get('mysql', 'user'),
 								config.get('mysql', 'password'),
 								config.get('mysql', 'db'))
