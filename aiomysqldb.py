@@ -21,10 +21,11 @@ import asyncio
 import logging
 from configparser import ConfigParser
 from threading import Thread
-from typing import Dict, NoReturn, Optional, Sequence, T, Tuple, Union
+from typing import Dict, Optional, Sequence, TypeVar, Tuple, Union
 
 import aiomysql
 
+AnyT = TypeVar('Any')
 
 class _MySqlDB:
 
@@ -52,7 +53,7 @@ class _MySqlDB:
 		self.autocommit: bool = True
 		self.mysql_pool: aiomysql.Connection = None
 
-	async def init_connection(self) -> NoReturn:
+	async def init_connection(self) -> None:
 		self.mysql_pool = await aiomysql.create_pool(
 			host=self.host,
 			user=self.user,
@@ -71,36 +72,36 @@ class _MySqlDB:
 		db: str,
 		charset: str='utf8mb4',
 		cursorclass: aiomysql.Cursor=aiomysql.DictCursor
-	) -> '_mysqldb':
+	) -> '_MySqlDB':
 		self = _MySqlDB(host, user, password, db, charset, cursorclass)
 		await self.init_connection()
 		return self
 
-	async def query(self, sql: str, args: Sequence[str]=()) -> Tuple[Dict[str, T]]:
+	async def query(self, sql: str, args: Sequence[str]=()) -> Tuple[Dict[str, AnyT]]:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await cur.execute(sql, args)
 				return await cur.fetchall()
 
-	async def query1(self, sql: str, args: Sequence[str]=()) -> Optional[Dict[str, T]]:
+	async def query1(self, sql: str, args: Sequence[str]=()) -> Optional[Dict[str, AnyT]]:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await cur.execute(sql, args)
 				return await cur.fetchone()
 
-	async def execute(self, sql: str, args: Union[Sequence[str], Sequence[Sequence[str]]]=(), many: bool=False) -> NoReturn:
+	async def execute(self, sql: str, args: Union[Sequence[str], Sequence[Sequence[str]]]=(), many: bool=False) -> None:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await (cur.executemany if many else cur.execute)(sql, args)
 			await conn.commit()
 
-	async def close(self) -> NoReturn:
+	async def close(self) -> None:
 		self.mysql_pool.close()
 		await self.mysql_pool.wait_closed()
 
 
 class MySqlDB(_MySqlDB):
-	_self = None
+	_self: Optional['MySqlDB'] = None
 
 	@classmethod
 	async def create(cls,
@@ -119,9 +120,11 @@ class MySqlDB(_MySqlDB):
 
 	@staticmethod
 	def get_instance() -> 'MySqlDB':
+		if MySqlDB._self is None:
+			raise RuntimeError()
 		return MySqlDB._self
 
-async def main() -> NoReturn:
+async def main() -> None:
 	config = ConfigParser()
 	config.read('config.ini')
 	conn = await MySqlDB.create(config.get('mysql', 'host'),
@@ -133,17 +136,6 @@ async def main() -> NoReturn:
 	print(obj)
 	#conn.do_keepalive()
 	await conn.close()
-
-
-class ThreadWithEventLoop(Thread):
-	def __init__(self):
-		super().__init__(daemon=True)
-		self.event_loop = None
-		#self.coro = coro
-		self.start()
-	def run(self):
-		self.event_loop = asyncio.new_event_loop()
-		self.event_loop.run_forever()
 
 if __name__ == "__main__":
 	cron = main()

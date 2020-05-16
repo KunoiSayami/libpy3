@@ -21,10 +21,11 @@ import logging
 import time
 import traceback
 from threading import Lock, Thread
-from typing import Dict, NoReturn, Optional, Sequence, T, Tuple
+from typing import Dict, Optional, Sequence, TypeVar, Tuple
 
 import pymysql.cursors
 
+_cT = TypeVar('T')
 
 class _MySqlDB:
 
@@ -54,8 +55,8 @@ class _MySqlDB:
 		self.retries = 3
 		self.init_connection()
 
-	def init_connection(self) -> NoReturn:
-		self.mysql_connection = pymysql.connect(
+	def init_connection(self) -> None:
+		self.mysql_connection = pymysql.Connect(
 			host = self.host,
 			user = self.user,
 			password = self.password,
@@ -66,17 +67,17 @@ class _MySqlDB:
 		)
 		self.cursor = self.mysql_connection.cursor()
 
-	def commit(self) -> NoReturn:
+	def commit(self) -> None:
 		with self.execute_lock:
 			self.cursor.close()
 			self.mysql_connection.commit()
 			self.cursor = self.mysql_connection.cursor()
 
-	def query(self, sql: str, args: Sequence[T] = ()) -> Tuple[Dict[str, T], ...]:
+	def query(self, sql: str, args: Sequence[_cT] = ()) -> Tuple[Dict[str, _cT], ...]:
 		self.execute(sql, args)
 		return self.cursor.fetchall()
 
-	def query1(self, sql: str, args: Sequence[T] = ()) -> Optional[Dict[str, T]]:
+	def query1(self, sql: str, args: Sequence[_cT] = ()) -> Optional[Dict[str, _cT]]:
 		self.execute(sql, args)
 		return self.cursor.fetchone()
 
@@ -84,10 +85,10 @@ class _MySqlDB:
 		self.retries -= 1
 		return self.retries
 	
-	def reset_retries(self) -> NoReturn:
+	def reset_retries(self) -> None:
 		self.retries = 3
 
-	def execute(self, sql: str, args: Sequence[T] = (), many: bool = False) -> NoReturn:
+	def execute(self, sql: str, args: Sequence[_cT] = (), many: bool = False) -> None:
 		with self.execute_lock:
 			while self.get_retries():
 				try:
@@ -115,13 +116,13 @@ class _MySqlDB:
 					self.last_execute_time = time.time()
 			self.reset_retries()
 
-	def ping(self) -> NoReturn:
+	def ping(self) -> None:
 		return self.mysql_connection.ping()
 
-	def do_keepalive(self) -> NoReturn:
+	def do_keepalive(self) -> None:
 		Thread(target = self._do_keepalive, daemon = True).start()
 
-	def _do_keepalive(self) -> NoReturn:
+	def _do_keepalive(self) -> None:
 		while self._do_keepalive:
 			try:
 				if time.time() - self.last_execute_time > 300 and not self.exit_request:
@@ -132,26 +133,26 @@ class _MySqlDB:
 					time.sleep(1)
 					if self.exit_request: return
 
-	def close(self) -> NoReturn:
+	def close(self) -> None:
 		with self.execute_lock:
 			self.exit_request = True
 			self.cursor.close()
 			self.mysql_connection.commit()
 			self.mysql_connection.close()
 	
-	def _call_without_exception(self, target: 'callable', *args, **kwargs) -> NoReturn:
+	def _call_without_exception(self, target: 'callable', *args, **kwargs) -> None:
 		try:
 			target(*args, **kwargs)
 		except:
 			pass
 
-	def _force_close(self) -> NoReturn:
+	def _force_close(self) -> None:
 		self._call_without_exception(self.cursor.close)
 		self._call_without_exception(self.mysql_connection.close)
 
 
 class MySqlDB(_MySqlDB):
-	_self = None
+	_self: Optional['MySqlDB'] = None
 	@staticmethod
 	def init_instance(
 		host: str,
@@ -167,4 +168,6 @@ class MySqlDB(_MySqlDB):
 	
 	@staticmethod
 	def get_instance() -> 'MySqlDB':
+		if MySqlDB._self is None:
+			raise RuntimeError()
 		return MySqlDB._self

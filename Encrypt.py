@@ -25,22 +25,22 @@ import struct
 import tempfile
 from base64 import b64decode, b64encode
 from configparser import ConfigParser
-from typing import NoReturn, Optional, Tuple
+from typing import Optional, Tuple
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 
 class AESGCMEncryptClassic:
-	def __init__(self, key: Optional[str]=None, associated_data: Optional[bytes]=None, config_file: str='config.ini', *, hash_func=hashlib.sha256):
+	def __init__(self, key: Optional[str]=None, associated_data: Optional[str]=None, config_file: str='config.ini', *, hash_func=hashlib.sha256):
 		config = ConfigParser()
 		if not all((key, associated_data)):
 			# Try read data from configure file
 			if len(config.read(config_file)) == 0 or not config.has_section('encrypt'):
 				raise IOError(f'`{config_file}\' is not a compliant profile.')
 		#self.key = key if key else config['encrypt']['key']
-		self.key = hash_func((key if key else config['encrypt']['key']).encode()).digest()
-		self.associated_data = (associated_data if associated_data else config['encrypt']['associated_data']).encode()
+		self.key: bytes = hash_func((key if key else config['encrypt']['key']).encode()).digest()
+		self.associated_data: bytes = (associated_data if associated_data else config['encrypt']['associated_data']).encode()
 
 	@staticmethod
 	def _encrypt(key: bytes, plaintext: bytes, associated_data: bytes) -> Tuple[bytes, bytes, bytes]:
@@ -83,10 +83,10 @@ class AESGCMEncryptClassic:
 		# If the tag does not match an InvalidTag exception will be raised.
 		return decryptor.update(ciphertext) + decryptor.finalize()
 
-	def encrypts(self, plaintext: str) -> str:
+	def encrypts(self, plaintext: str) -> Tuple[bytes, bytes, bytes]:
 		return self.encrypt(plaintext.encode())
 
-	def encrypt(self, binary_str: bytes) -> bytes:
+	def encrypt(self, binary_str: bytes) -> Tuple[bytes, bytes, bytes]:
 		'''
 			return (iv, ciphertext, encryptor.tag)
 		'''
@@ -105,7 +105,7 @@ class AESGCMEncryptClassic:
 		return self.decrypt(iv, ciphertext, tag).decode()
 
 	def b64decrypt(self, base64_encoded_str: bytes) -> bytes:
-		return self.decrypt(*(b64decode(_str.encode()) for _str in base64_encoded_str.split('\\\\n')))
+		return self.decrypt(*(b64decode(_str.encode()) for _str in base64_encoded_str.decode().split('\\\\n')))
 
 	def b64decrypts(self, base64_encoded_str: bytes) -> str:
 		return self.b64decrypt(base64_encoded_str).decode()
@@ -116,7 +116,7 @@ class AESGCMEncrypt(AESGCMEncryptClassic):
 	class VersionException(Exception): pass
 
 	@staticmethod
-	def encrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024) -> NoReturn:
+	def encrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024) -> None:
 		# Generate a random 96-bit IV.
 		iv = os.urandom(12)
 
@@ -145,7 +145,7 @@ class AESGCMEncrypt(AESGCMEncryptClassic):
 			#print(AESGCMEncrypt.VERSION, iv, encryptor.tag)
 
 	@staticmethod
-	def decrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024) -> NoReturn:
+	def decrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024) -> None:
 		with open(input_file_name, 'rb') as fin, open(output_file_name, 'wb') as fout:
 			#associated_data_size, tag_size = struct.unpack('<QQ', fin.read(struct.calcsize('QQ')))
 			_version, iv, tag = struct.unpack('<Q12s16s', fin.read(struct.calcsize('Q12s16s')))
@@ -167,13 +167,13 @@ class AESGCMEncrypt(AESGCMEncryptClassic):
 				fout.write(decryptor.update(chunk))
 			fout.write(decryptor.finalize())
 
-	def fencrypt(self, input_file_name: str, output_file_name: str, chunk_size: int = 1024) -> NoReturn:
+	def fencrypt(self, input_file_name: str, output_file_name: str, chunk_size: int = 1024) -> None:
 		self.encrypt_file(self.key, input_file_name, output_file_name, self.associated_data, chunk_size)
 
-	def fdecrypt(self, input_file_name: str, output_file_name: str, chunk_size: int = 1024) -> NoReturn:
-		self.decrypt_file(self.key, input_file_name, output_file_name, chunk_size)
+	def fdecrypt(self, input_file_name: str, output_file_name: str, chunk_size: int = 1024) -> None:
+		self.decrypt_file(self.key, input_file_name, output_file_name, self.associated_data, chunk_size)
 
-def test_random_file(mute: bool = False) -> NoReturn:
+def test_random_file(mute: bool = False) -> None:
 	import random
 	interrupted = False
 	with tempfile.TemporaryDirectory(prefix='tmp', dir='.') as tmpd:
@@ -189,7 +189,7 @@ def test_random_file(mute: bool = False) -> NoReturn:
 	if interrupted:
 		raise InterruptedError
 
-def test_specify_file(file_name: str, mute: bool = False) -> NoReturn:
+def test_specify_file(file_name: str, mute: bool = False) -> None:
 	import filecmp, traceback
 	key = b'test'
 	key_hash = hashlib.sha256(key).digest()
@@ -204,5 +204,5 @@ def test_specify_file(file_name: str, mute: bool = False) -> NoReturn:
 
 if __name__ == '__main__':
 	s = AESGCMEncryptClassic('1234', 'associated data')
-	print(s.b64decrypts(s.b64encrypts('This is test string')))
+	print(s.b64decrypts(s.b64encrypts('This is test string').encode()))
 	test_random_file()
