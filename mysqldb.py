@@ -21,9 +21,9 @@ import logging
 import time
 import traceback
 from threading import Lock, Thread
-from typing import Dict, Optional, Sequence, TypeVar, Tuple
+from typing import Dict, Optional, Sequence, Tuple, TypeVar
 
-import pymysql.cursors
+import pymysql
 
 _cT = TypeVar('T')
 
@@ -56,7 +56,7 @@ class _MySqlDB:
 		self.init_connection()
 
 	def init_connection(self) -> None:
-		self.mysql_connection = pymysql.Connect(
+		self.mysql_connection = pymysql.connect(
 			host = self.host,
 			user = self.user,
 			password = self.password,

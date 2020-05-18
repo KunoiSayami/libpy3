@@ -20,14 +20,15 @@
 import asyncio
 import logging
 from configparser import ConfigParser
-from threading import Thread
 from typing import Dict, Optional, Sequence, TypeVar, Tuple, Union
 
 import aiomysql
 
 AnyT = TypeVar('Any')
 
-class _MySqlDB:
+class MySqlDB:
+
+	_self: Optional['MySqlDB'] = None
 
 	def __init__(
 		self,
@@ -35,7 +36,6 @@ class _MySqlDB:
 		user: str,
 		password: str,
 		db: str,
-		#event_loop: asyncio.AbstractEventLoop,
 		charset: str='utf8mb4',
 		cursorclass: aiomysql.Cursor=aiomysql.DictCursor,
 	):
@@ -64,19 +64,6 @@ class _MySqlDB:
 			autocommit=True
 		)
 
-	@classmethod
-	async def create(cls,
-		host: str,
-		user: str,
-		password: str,
-		db: str,
-		charset: str='utf8mb4',
-		cursorclass: aiomysql.Cursor=aiomysql.DictCursor
-	) -> '_MySqlDB':
-		self = _MySqlDB(host, user, password, db, charset, cursorclass)
-		await self.init_connection()
-		return self
-
 	async def query(self, sql: str, args: Sequence[str]=()) -> Tuple[Dict[str, AnyT]]:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
@@ -98,10 +85,6 @@ class _MySqlDB:
 	async def close(self) -> None:
 		self.mysql_pool.close()
 		await self.mysql_pool.wait_closed()
-
-
-class MySqlDB(_MySqlDB):
-	_self: Optional['MySqlDB'] = None
 
 	@classmethod
 	async def create(cls,
