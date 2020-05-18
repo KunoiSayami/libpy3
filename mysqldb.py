@@ -21,11 +21,11 @@ import logging
 import time
 import traceback
 from threading import Lock, Thread
-from typing import Dict, Optional, Sequence, Tuple, TypeVar
+from typing import Dict, Optional, Sequence, Tuple, TypeVar, Union
 
 import pymysql
 
-_cT = TypeVar('T')
+_cT = TypeVar('_cT')
 
 class _MySqlDB:
 
@@ -36,23 +36,23 @@ class _MySqlDB:
 		password: str,
 		db: str,
 		charset: str = 'utf8mb4',
-		cursorclass = pymysql.cursors.DictCursor,
-		autocommit = False
+		cursorclass: pymysql.cursors.Cursor = pymysql.cursors.DictCursor,
+		autocommit: bool = False
 	):
-		self.logger = logging.getLogger(__name__)
+		self.logger: logging.Logger = logging.getLogger(__name__)
 		self.logger.setLevel(logging.DEBUG)
-		self.host = host
-		self.user = user
-		self.password = password
-		self.db = db
-		self.charset = charset
-		self.cursorclass = cursorclass
-		self.execute_lock = Lock()
-		self.last_execute_time = 0
-		self.exit_request = False
-		self.autocommit = autocommit
-		self.cursor = None
-		self.retries = 3
+		self.host: str = host
+		self.user: str = user
+		self.password: str = password
+		self.db: str = db
+		self.charset: str = charset
+		self.cursorclass: pymysql.cursors.Cursor = cursorclass
+		self.execute_lock: Lock = Lock()
+		self.last_execute_time: float = 0.0
+		self.exit_request: bool = False
+		self.autocommit: bool = autocommit
+		self.cursor: pymysql.cursors.Cursor = None
+		self.retries: int = 3
 		self.init_connection()
 
 	def init_connection(self) -> None:
@@ -73,11 +73,11 @@ class _MySqlDB:
 			self.mysql_connection.commit()
 			self.cursor = self.mysql_connection.cursor()
 
-	def query(self, sql: str, args: Sequence[_cT] = ()) -> Tuple[Dict[str, _cT], ...]:
+	def query(self, sql: str, args: Union[Sequence[_cT], _cT] = ()) -> Tuple[Dict[str, _cT], ...]:
 		self.execute(sql, args)
 		return self.cursor.fetchall()
 
-	def query1(self, sql: str, args: Sequence[_cT] = ()) -> Optional[Dict[str, _cT]]:
+	def query1(self, sql: str, args: Union[Sequence[_cT], _cT] = ()) -> Optional[Dict[str, _cT]]:
 		self.execute(sql, args)
 		return self.cursor.fetchone()
 
@@ -88,7 +88,7 @@ class _MySqlDB:
 	def reset_retries(self) -> None:
 		self.retries = 3
 
-	def execute(self, sql: str, args: Sequence[_cT] = (), many: bool = False) -> None:
+	def execute(self, sql: str, args: Union[Sequence[_cT], _cT] = (), many: bool = False) -> None:
 		with self.execute_lock:
 			while self.get_retries():
 				try:

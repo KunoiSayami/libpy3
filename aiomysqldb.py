@@ -20,11 +20,11 @@
 import asyncio
 import logging
 from configparser import ConfigParser
-from typing import Dict, Optional, Sequence, TypeVar, Tuple, Union
+from typing import Dict, Optional, Sequence, TypeVar, Tuple, Union, ByteString
 
 import aiomysql
 
-AnyT = TypeVar('Any')
+_cT = TypeVar('_cT', str, int, None, ByteString)
 
 class MySqlDB:
 
@@ -64,19 +64,19 @@ class MySqlDB:
 			autocommit=True
 		)
 
-	async def query(self, sql: str, args: Sequence[str]=()) -> Tuple[Dict[str, AnyT]]:
+	async def query(self, sql: str, args: Union[Sequence[_cT], _cT]=()) -> Tuple[Dict[str, _cT]]:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await cur.execute(sql, args)
 				return await cur.fetchall()
 
-	async def query1(self, sql: str, args: Sequence[str]=()) -> Optional[Dict[str, AnyT]]:
+	async def query1(self, sql: str, args: Union[Sequence[_cT], _cT]=()) -> Optional[Dict[str, _cT]]:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await cur.execute(sql, args)
 				return await cur.fetchone()
 
-	async def execute(self, sql: str, args: Union[Sequence[str], Sequence[Sequence[str]]]=(), many: bool=False) -> None:
+	async def execute(self, sql: str, args: Union[Sequence[_cT], Sequence[Sequence[_cT]]]=(), many: bool=False) -> None:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await (cur.executemany if many else cur.execute)(sql, args)
