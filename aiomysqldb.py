@@ -94,7 +94,7 @@ class MySqlDB:
 		db: str,
 		charset: str='utf8mb4',
 		cursorclass: aiomysql.Cursor=aiomysql.DictCursor
-	) -> 'MySqlDB':
+	):
 		self = cls(host, user, password, db, charset, cursorclass)
 		if cls._self is None:
 			cls._self = self
