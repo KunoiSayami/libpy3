@@ -76,7 +76,7 @@ class MySqlDB:
 				await cur.execute(sql, args)
 				return await cur.fetchone()
 
-	async def execute(self, sql: str, args: Union[Sequence[_cT], Sequence[Sequence[_cT]]]=(), many: bool=False) -> None:
+	async def execute(self, sql: str, args: Union[Sequence[_cT], Sequence[Sequence[_cT]], _cT]=(), many: bool=False) -> None:
 		async with self.mysql_pool.acquire() as conn:
 			async with conn.cursor() as cur:
 				await (cur.executemany if many else cur.execute)(sql, args)
