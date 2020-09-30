@@ -31,22 +31,14 @@ class PgSQLdb:
             user: str,
             password: str,
             db: str,
+            pool: asyncpg.pool.Pool
     ):
         self.host: str = host
         self.port: int = port
         self.user: str = user
         self.password: str = password
         self.db: str = db
-        self.pgsql_connection: asyncpg.connection = None
-
-    async def create_connect(self) -> None:
-        self.pgsql_connection = await asyncpg.connect(
-            host=self.host,
-            port=self.port,
-            user=self.user,
-            password=self.password,
-            database=self.db
-        )
+        self.pgsql_pool: asyncpg.pool.Pool = pool
 
     @classmethod
     async def create(cls,
@@ -54,24 +46,33 @@ class PgSQLdb:
                      port: int,
                      user: str,
                      password: str,
-                     db: str,
+                     db: str
                      ) -> 'PgSQLdb':
-        self = cls(host, port, user, password, db)
-        await self.create_connect()
+        pool = await asyncpg.create_pool(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=db
+        )
+        self = cls(host, port, user, password, db, pool)
         return self
 
     async def query(self, sql: str, *args: Optional[Any]) -> Tuple[asyncpg.Record, ...]:
-        return await self.pgsql_connection.fetch(sql, *args)
+        async with self.pgsql_pool.acquire() as conn:
+            return await conn.fetch(sql, *args)
 
     async def query1(self, sql: str, *args: Optional[Any]) -> Optional[asyncpg.Record]:
-        return await self.pgsql_connection.fetchrow(sql, *args)
+        async with self.pgsql_pool.acquire() as conn:
+            return await conn.fetchrow(sql, *args)
 
     async def execute(self, sql: str, *args: Union[Sequence[Tuple[Any, ...]],
                                                    Optional[Any]], many: bool = False) -> None:
-        if many:
-            await self.pgsql_connection.executemany(sql, *args)
-        else:
-            await self.pgsql_connection.execute(sql, *args)
+        async with self.pgsql_pool.acquire() as conn:
+            if many:
+                await conn.executemany(sql, *args)
+            else:
+                await conn.execute(sql, *args)
 
     async def close(self) -> None:
-        await self.pgsql_connection.close()
+        await self.pgsql_pool.close()
