@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Encrypt.py
-# Copyright (C) 2018-2020 KunoiSayami
+# Copyright (C) 2018-2021 KunoiSayami
 #
 # This module is part of libpy3 and is released under
 # the AGPL v3 License: https://www.gnu.org/licenses/agpl-3.0.txt
@@ -113,10 +113,13 @@ class AESGCMEncryptClassic:
 
 class AESGCMEncrypt(AESGCMEncryptClassic):
 	VERSION = 1
-	class VersionException(Exception): pass
+
+	class VersionException(Exception):
+		"""When version mismatch raise"""
 
 	@staticmethod
-	def encrypt_file(key: bytes, input_file_name: str, output_file_name: str, associated_data: bytes, chunk_size: int = 1024) -> None:
+	def encrypt_file(key: bytes, input_file_name: str, output_file_name: str,
+					 associated_data: bytes, chunk_size: int = 1024) -> None:
 		# Generate a random 96-bit IV.
 		iv = os.urandom(12)
 
@@ -173,6 +176,7 @@ class AESGCMEncrypt(AESGCMEncryptClassic):
 	def fdecrypt(self, input_file_name: str, output_file_name: str, chunk_size: int = 1024) -> None:
 		self.decrypt_file(self.key, input_file_name, output_file_name, self.associated_data, chunk_size)
 
+
 def test_random_file(mute: bool = False) -> None:
 	import random
 	interrupted = False
@@ -189,6 +193,7 @@ def test_random_file(mute: bool = False) -> None:
 	if interrupted:
 		raise InterruptedError
 
+
 def test_specify_file(file_name: str, mute: bool = False) -> None:
 	import filecmp, traceback
 	key = b'test'
@@ -196,7 +201,7 @@ def test_specify_file(file_name: str, mute: bool = False) -> None:
 	try:
 		AESGCMEncrypt.encrypt_file(key_hash, file_name, file_name + '.enc', b'data')
 		AESGCMEncrypt.decrypt_file(key_hash, file_name + '.enc', 'decrypted.txt', b'data')
-		if mute != True and filecmp.cmp(file_name, 'decrypted.txt'):
+		if mute is not True and filecmp.cmp(file_name, 'decrypted.txt'):
 			print('File test successfully')
 	except (TypeError, ValueError):
 		traceback.print_exc()
